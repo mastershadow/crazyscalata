@@ -136,9 +136,9 @@ def format_time(t: float) -> str:
   
 def create_extra():
   c = db.cursor()
-  c.execute("SELECT AVG(ftempo) FROM c_crazy WHERE tipo = 'CICLISTA'")
+  c.execute("SELECT AVG(ftempo) FROM c_assoluti")
   avg = c.fetchone()[0]
-  c.execute(f"SELECT *, abs({avg} - ftempo) as diff FROM c_crazy WHERE tipo = 'CICLISTA' ORDER BY diff ASC LIMIT 10")
+  c.execute(f"SELECT *, abs({avg} - ftempo) as diff FROM c_crazy ORDER BY diff ASC LIMIT 10")
 
   data = [['Pos.', 'Nome', 'Pettorale', 'Tempo', 'Data Nascita', 'Crazy']]
   rows = c.fetchall()
@@ -153,7 +153,7 @@ def create_extra():
   pdf.write(text="CrazyScalata 2025\n")
   pdf.set_font("helvetica", style="", size=12)
   pdf.write(10, "I più vicini alla media\n")
-  pdf.write(10, f'Media Ciclisti Crazy: {format_time(avg)}\n')
+  pdf.write(10, f'Media di arrivo: {format_time(avg)}\n')
   
   spacing = 1.15
   row_height = pdf.font_size
