@@ -130,6 +130,8 @@ def format_time(t: float) -> str:
   whole = ":".join(wparts)
   if frac > 0:
     res = whole + str(frac).ljust(2, "0")[1:4]
+  else:
+    res = whole
     
   return res
     
@@ -138,6 +140,8 @@ def create_extra():
   c = db.cursor()
   c.execute("SELECT AVG(ftempo) FROM c_assoluti")
   avg = c.fetchone()[0]
+  if avg is None:
+    avg = 0
   c.execute(f"SELECT *, abs({avg} - ftempo) as diff FROM c_crazy ORDER BY diff ASC LIMIT 10")
 
   data = [['Pos.', 'Nome', 'Pettorale', 'Tempo', 'Data Nascita', 'Crazy']]
@@ -188,7 +192,10 @@ def create_db():
   
   if (debug):
     debug_db = "debug.sqlite"
-    os.remove(debug_db)
+    try:
+      os.remove(debug_db)
+    except OSError:
+      pass
     db = sqlite3.connect(debug_db)
   else:
     db = sqlite3.connect(":memory:")

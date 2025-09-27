@@ -5,6 +5,14 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Classifiche",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "classifiche.py",
+      "args": ["data/crazyscalata.xlsx"],
+      "console": "integratedTerminal"
+    },
+    {
       "name": "Test Classifiche",
       "type": "debugpy",
       "request": "launch",
