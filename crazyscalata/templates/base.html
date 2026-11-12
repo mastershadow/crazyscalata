@@ -17,6 +17,7 @@
       <a href="{{ url_for('iscritti') }}" class="{{ 'on' if ep in ('iscritti', 'nuovo', 'modifica') }}">Iscritti</a>
       <a href="{{ url_for('import_csv') }}" class="{{ 'on' if ep == 'import_csv' }}">Import</a>
       <a href="{{ url_for('tempi') }}" class="{{ 'on' if ep in ('tempi', 'inserisci_tempi') }}">Tempi</a>
+      <a href="{{ url_for('pranzo') }}" class="{{ 'on' if ep == 'pranzo' }}">Pranzo</a>
       <a href="{{ url_for('classifiche') }}" class="{{ 'on' if ep == 'classifiche' }}">Classifiche</a>
       <a href="{{ url_for('backup_page') }}" class="{{ 'on' if ep == 'backup_page' }}">Backup</a>
     </nav>

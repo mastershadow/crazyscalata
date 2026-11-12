@@ -91,7 +91,7 @@ def test_sample_rankings(tmp_path):
   files = rankings.write_pdfs(db, 2026, tmp_path)
   assert [f.name for f in files] == ["Crazy.pdf", "Assoluti.pdf", "Donne cicliste.pdf", "Podisti.pdf",
                                      "Donne podiste.pdf", "Traguardo volante Crazy.pdf", "Traguardo volante Tutti.pdf",
-                                     "Premi.pdf"]
+                                     "Premi.pdf", "Pranzo.pdf"]
   tv = rankings.classifica(db, "TV", "1 = 1", "passaggi").righe
   assert len(tv) == len(ass) - 1  # uno senza intermedio
   assert all(f.parent == tmp_path / "2026" and f.stat().st_size > 0 for f in files)
@@ -169,7 +169,7 @@ def test_traguardo_volante_senza_intermedi(tmp_path):
   assert [t.titolo for t in rankings.classifiche(db)] == ["Crazy", "Assoluti", "Donne cicliste", "Podisti", "Donne podiste"]
   t = rankings.premio_traguardo_volante(db)
   assert t.righe == [] and t.sottotitolo == "Non disputato"
-  assert len(rankings.write_pdfs(db, 2026, tmp_path)) == 6
+  assert len(rankings.write_pdfs(db, 2026, tmp_path)) == 7
   # solo il pettorale del primo, senza tempo
   rankings.set_setting(db, "traguardo_volante", "2")
   t = rankings.premio_traguardo_volante(db)
@@ -182,3 +182,7 @@ def test_podio_tie_at_last():
   _people(db, [(i, "CICLISTA", "M", "NO", n, "1:00") for i, n in enumerate(nascite, 1)])
   # P5 e P6 nati lo stesso giorno, a pari merito al 5° posto tra i meno giovani: entrano entrambi, P7 no
   assert [n for _, n in _names(rankings.premio_eta(db, "x", giovani=False))] == ["P1", "P2", "P3", "P4", "P5", "P6"]
+
+
+def test_norm_int():
+  assert [dbm.norm_int(v) for v in ("3", " 2 ", "2 (moglie e figlio)", "", None, "nessuno")] == [3, 2, 2, 0, 0, 0]

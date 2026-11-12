@@ -9,7 +9,7 @@
   <span><b>{{ stats.totale }}</b> iscritti</span>
   <span><b>{{ stats.pagati }}</b> pagati</span>
   <span><b>{{ stats.con_pettorale }}</b> con pettorale</span>
-  <span><b>{{ stats.pranzi }}</b> pranzi</span>
+  <span><a href="{{ url_for('pranzo') }}"><b>{{ stats.pranzi }}</b> al pranzo</a></span>
   {% if stats.incompleti %}<span class="warn"><b>{{ stats.incompleti }}</b> da completare</span>{% endif %}
   <label class="filter"><input type="checkbox" id="solo-incompleti"> solo da completare</label>
 </div>

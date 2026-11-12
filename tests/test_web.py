@@ -93,7 +93,7 @@ def test_event_day_flow(client, tmp_path):
   ass = r.text.index(">Assoluti <small>")
   assert r.text.index("Luca Verdi", ass) < r.text.index("Mario Rossi", ass)
   client.post("/classifiche/pdf")
-  assert len(list((tmp_path / "out" / "2026").glob("*.pdf"))) == 8
+  assert len(list((tmp_path / "out" / "2026").glob("*.pdf"))) == 9
   assert client.get("/out/Premi.pdf").status_code == 200
 
   # traguardo volante: Mario (intermedio 1:30) primo, anche se all'arrivo è dietro a Luca
@@ -241,3 +241,36 @@ def _nascita(tmp_path, nome):
   import sqlite3
   return sqlite3.connect(tmp_path / "data" / "crazyscalata-2025.sqlite").execute(
     "select datanascita from iscritti where nome = ?", (nome,)).fetchone()[0]
+
+
+def test_pranzo(client, tmp_path):
+  for nome, cognome, pranzo, ospiti, pett in [("Anna", "Bianchi", "SI", "2", "3"), ("Carlo", "Abate", "SI", "0", ""),
+                                               ("Dario", "Zeta", "NO", "5", "")]:
+    client.post("/iscritti/nuovo", data={"nome": nome, "cognome": cognome, "datanascita": "1990-01-01",
+                                         "pettorale": pett, "pranzo": pranzo, "ospiti_pranzo": ospiti},
+                follow_redirects=True)
+  r = client.get("/pranzo")
+  assert "2 iscritti al pranzo, 4 persone in tutto" in r.text
+  assert r.text.index("Abate Carlo") < r.text.index("Bianchi Anna") and "Zeta" not in r.text
+  r = client.post("/pranzo/pdf", follow_redirects=True)
+  assert (tmp_path / "out" / "2026" / "Pranzo.pdf").exists() and "Pranzo.pdf" in r.text
+
+
+def test_svuota_edizione(client, tmp_path):
+  client.post("/iscritti/nuovo", data={"nome": "Prova", "cognome": "Test", "datanascita": "1990-01-01",
+                                       "pettorale": "9", "pranzo": "SI"})
+  client.post("/tempi/arrivo", data={"azione": "salva", "testo": "9 30:00"})
+  client.post("/classifiche/pdf")
+  out = tmp_path / "out" / "2026"
+  assert list(out.glob("*.pdf"))
+
+  # conferma sbagliata: non succede niente
+  r = client.post("/edizioni/svuota", data={"conferma": "2025"}, follow_redirects=True)
+  assert "scrivi l&#39;anno 2026" in r.text and "Prova" in client.get("/").text
+
+  r = client.post("/edizioni/svuota", data={"conferma": "2026", "pdf": "1"}, follow_redirects=True)
+  assert "Edizione 2026 svuotata: tolti 1 iscritti, 1 arrivi" in r.text
+  assert "Nessun iscritto" in client.get("/").text and not list(out.glob("*.pdf"))
+  backups = list((tmp_path / "data" / "backup").glob("crazyscalata-2026-*.sqlite"))
+  import sqlite3
+  assert any(sqlite3.connect(b).execute("select count(*) from iscritti").fetchone()[0] == 1 for b in backups)

@@ -37,4 +37,17 @@
   </form>
   <p class="hint">Per gli anni gestiti con l'Excel (come il 2025): fogli ISCRITTI e TEMPI nel formato di <code>data/template.xlsx</code>.</p>
 </div>
+
+{% if year %}
+<div class="card">
+  <h2 style="margin-top:0">Svuota l'edizione {{ year }}</h2>
+  <p class="hint">Dopo le prove: cancella iscritti, pagamenti, tempi e traguardo volante del {{ year }} e riparti da zero
+    (poi reimporti il CSV vero). Le altre edizioni e il PIN non cambiano. Prima viene salvata una copia in <a href="{{ url_for('backup_page') }}">Backup</a>.</p>
+  <form method="post" action="{{ url_for('svuota_edizione') }}" class="bar">
+    <input name="conferma" placeholder="Scrivi {{ year }}" inputmode="numeric" size="10" autocomplete="off" required>
+    <label class="filter"><input type="checkbox" name="pdf" value="1"> cancella anche i PDF in <code>out/{{ year }}/</code></label>
+    <button class="btn danger">Svuota {{ year }}</button>
+  </form>
+</div>
+{% endif %}
 {% endblock %}

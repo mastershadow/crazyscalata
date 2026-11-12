@@ -39,6 +39,7 @@ class Tabella:
   sottotitolo: str
   header: list[str]
   righe: list[list[str]]
+  larghezze: list[int] | None = None  # colonne del PDF (mm), se diverse da quelle delle classifiche
 
 
 def format_date(iso: str | None) -> str:
@@ -121,6 +122,21 @@ def premio_traguardo_volante(db: sqlite3.Connection) -> Tabella:
                    (r["tipo"] or "").capitalize(), r["crazy"] or ""]])
 
 
+def pranzo(db: sqlite3.Connection) -> Tabella:
+  """Chi viene al pranzo sociale, in ordine alfabetico, con le persone (lui/lei più gli ospiti).
+  L'ultima riga è il totale."""
+  rows = db.execute("SELECT * FROM iscritti WHERE pranzo = 'SI' ORDER BY cognome, nome").fetchall()
+  righe = [[str(i), f"{r['cognome']} {r['nome']}".strip(), str(r["pettorale"] or ""),
+            str(r["ospiti_pranzo"]), str(1 + r["ospiti_pranzo"])] for i, r in enumerate(rows, 1)]
+  ospiti = sum(r["ospiti_pranzo"] for r in rows)
+  if rows:
+    righe.append(["", "Totale", "", str(ospiti), str(len(rows) + ospiti)])
+  return Tabella("Pranzo sociale",
+                 f"{len(rows)} iscritti al pranzo, {len(rows) + ospiti} persone in tutto (ospiti compresi)",
+                 ["N.", "Cognome Nome", "Pettorale", "Ospiti", "Persone"], righe,
+                 larghezze=[18, 120, 30, 30, 30])
+
+
 def has_intermedi(db: sqlite3.Connection) -> bool:
   return db.execute("SELECT 1 FROM passaggi LIMIT 1").fetchone() is not None
 
@@ -174,7 +190,7 @@ def _new_pdf(year: int) -> FPDF:
 def _table(pdf: FPDF, t: Tabella):
   """Titolo + tabella. Una tabella che sta in una pagina non viene mai spezzata;
   una più lunga (es. Assoluti) continua sulla pagina dopo ripetendo l'intestazione."""
-  widths = COL_W if len(t.header) == len(COL_W) else [18, 85, 25, 30, 35, 30, 20, 30]
+  widths = t.larghezze or (COL_W if len(t.header) == len(COL_W) else [18, 85, 25, 30, 35, 30, 20, 30])
   pdf.set_font("helvetica", style="", size=11)
   h = pdf.font_size * 1.6
   n_rows = max(len(t.righe), 1) + 1
@@ -228,4 +244,16 @@ def write_pdfs(db: sqlite3.Connection, year: int, out_dir: str | Path) -> list[P
   p = out / "Premi.pdf"
   pdf.output(str(p))
   files.append(p)
+  files.append(write_pranzo_pdf(db, year, out_dir))
   return files
+
+
+def write_pranzo_pdf(db: sqlite3.Connection, year: int, out_dir: str | Path) -> Path:
+  """Pranzo.pdf in out_dir/<anno>/: elenco di chi viene al pranzo con il totale delle persone."""
+  out = Path(out_dir) / str(year)
+  out.mkdir(parents=True, exist_ok=True)
+  pdf = _new_pdf(year)
+  _table(pdf, pranzo(db))
+  p = out / "Pranzo.pdf"
+  pdf.output(str(p))
+  return p

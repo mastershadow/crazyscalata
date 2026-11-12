@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime
+import re
 import sqlite3
 import unicodedata
 from pathlib import Path
@@ -178,7 +179,6 @@ def norm_tipo(v) -> str | None:
 
 
 def norm_int(v) -> int:
-  try:
-    return int(str(v).strip() or 0)
-  except ValueError:
-    return 0
+  """Il numero all'inizio del testo ("2", " 3 ", "2 (moglie e figlio)"); 0 se non c'è."""
+  m = re.match(r"\s*(\d+)", "" if v is None else str(v))
+  return int(m.group(1)) if m else 0

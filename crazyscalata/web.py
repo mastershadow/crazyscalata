@@ -173,6 +173,24 @@ def create_app(data_dir: str | Path, out_dir: str | Path, backup_dir: str | Path
     proposta = max([datetime.date.today().year] + [e["anno"] + 1 for e in elenco])
     return render_template("edizioni.html", elenco=elenco, proposta=proposta)
 
+  @app.post("/edizioni/svuota")
+  def svuota_edizione():
+    a = app.config["YEAR"]
+    if request.form.get("conferma", "").strip() != str(a):
+      flash(f"Per svuotare scrivi l'anno {a} nella casella di conferma", "err")
+      return redirect(url_for("edizioni_page"))
+    dest = backup(force=True)  # si può sempre tornare indietro
+    prima = edizioni.svuota(get_db())
+    pending_import().unlink(missing_ok=True)
+    msg = f"Edizione {a} svuotata: tolti {prima['iscritti']} iscritti, {prima['tempi']} arrivi, {prima['intermedi']} intermedi."
+    if request.form.get("pdf") and year_out().exists():
+      pdfs = list(year_out().glob("*.pdf"))
+      for p in pdfs:
+        p.unlink()
+      msg += f" Cancellati {len(pdfs)} PDF in {year_out()}."
+    flash(f"{msg} Copia di prima: {dest.name} (in Backup).", "ok")
+    return redirect(url_for("edizioni_page"))
+
   def backup(force: bool = False) -> Path | None:
     if not force and time.time() - _last_backup[0] < BACKUP_EVERY_S:
       return None
@@ -436,6 +454,19 @@ def create_app(data_dir: str | Path, out_dir: str | Path, backup_dir: str | Path
     files = rankings.write_pdfs(get_db(), app.config["YEAR"], app.config["OUT_DIR"])
     flash(f"Generati {len(files)} PDF in {year_out()}", "ok")
     return redirect(url_for("classifiche"))
+
+  # ---------- pranzo ----------
+
+  @app.get("/pranzo")
+  def pranzo():
+    out = year_out() / "Pranzo.pdf"
+    return render_template("pranzo.html", t=rankings.pranzo(get_db()), pdf=out.exists())
+
+  @app.post("/pranzo/pdf")
+  def pranzo_pdf():
+    p = rankings.write_pranzo_pdf(get_db(), app.config["YEAR"], app.config["OUT_DIR"])
+    flash(f"Generato {p}", "ok")
+    return redirect(url_for("pranzo"))
 
   @app.get("/out/<path:name>")
   def pdf(name: str):

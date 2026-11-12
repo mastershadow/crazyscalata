@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Pranzo sociale <small class="muted">{{ t.sottotitolo }}</small></h1>
+
+<div class="bar">
+  <form method="post" action="{{ url_for('pranzo_pdf') }}"><button class="btn primary">Genera PDF</button></form>
+  {% if pdf %}<span class="files">In <code>out/{{ year }}/</code>: <a href="{{ url_for('pdf', name='Pranzo.pdf') }}" target="_blank">Pranzo.pdf</a></span>{% endif %}
+</div>
+
+<p class="muted">Persone = l'iscritto più gli ospiti. Gli ospiti si correggono dalla scheda dell'iscritto.</p>
+
+<table class="list">
+  <thead><tr>{% for h in t.header %}<th{% if loop.index > 2 %} class="num"{% endif %}>{{ h }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for row in t.righe %}
+    <tr{% if row[1] == 'Totale' and loop.last %} class="totale"{% endif %}>{% for c in row %}<td{% if loop.index > 2 %} class="num"{% endif %}>{{ c }}</td>{% endfor %}</tr>
+  {% else %}
+    <tr><td colspan="{{ t.header|length }}" class="empty">Nessuno ha detto di venire al pranzo.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

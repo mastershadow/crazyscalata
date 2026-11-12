@@ -64,6 +64,17 @@ def crea_da_excel(data_dir: str | Path, anno: int, xlsx: str | Path) -> Path:
   return p
 
 
+def svuota(db: sqlite3.Connection) -> dict:
+  """Cancella iscritti, tempi e impostazioni dell'edizione (es. dopo le prove), lasciando il file.
+  Restituisce quante righe c'erano."""
+  tabelle = ("iscritti", "tempi", "intermedi", "impostazioni")
+  prima = {t: db.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in tabelle}
+  for t in ("tempi", "intermedi", "impostazioni", "iscritti"):
+    db.execute(f"DELETE FROM {t}")
+  db.commit()
+  return prima
+
+
 def storico(data_dir: str | Path, anno: int, chiavi: list[str]) -> dict[str, dict]:
   """Per ogni chiave, sesso/crazy/tipo dall'edizione precedente più recente in cui c'è
   (solo valori non vuoti) e l'anno da cui vengono: {chiave: {"anno": 2025, "sesso": "M", ...}}."""

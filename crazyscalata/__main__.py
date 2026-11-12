@@ -16,6 +16,8 @@ def main():
   p = argparse.ArgumentParser(prog="crazyscalata", description="CrazyScalata offline")
   p.add_argument("--year", type=int, help="edizione da aprire, creata se non esiste (default: l'ultima aperta)")
   p.add_argument("--data-dir", default=str(ROOT / "data"), help="cartella con edizioni, backup e config (default: data/)")
+  p.add_argument("--out-dir", help="cartella dei PDF, scritti in <out-dir>/<anno>/ "
+                                   "(default: out/, oppure <data-dir>/out se --data-dir è un'altra cartella)")
   p.add_argument("--port", type=int, default=8765)  # non 5000: su macOS lo usa AirPlay
   p.add_argument("--no-browser", action="store_true")
   p.add_argument("--reset-pin", action="store_true", help="cancella il PIN: al prossimo accesso se ne imposta uno nuovo")
@@ -25,10 +27,13 @@ def main():
     Config(args.data_dir).reset_pin()
     print("PIN cancellato: aprendo l'app ne imposterai uno nuovo.")
 
-  app = create_app(args.data_dir, ROOT / "out", anno=args.year)
+  # con una cartella dati di prova i PDF restano lì, così non si toccano quelli veri in out/
+  default_data = Path(args.data_dir).resolve() == ROOT / "data"
+  out_dir = Path(args.out_dir) if args.out_dir else (ROOT / "out" if default_data else Path(args.data_dir) / "out")
+  app = create_app(args.data_dir, out_dir, anno=args.year)
   url = f"http://127.0.0.1:{args.port}/"
   edizione = app.config["YEAR"] or "nessuna (creala dall'app)"
-  print(f"CrazyScalata: {url}  edizione {edizione}, dati in {args.data_dir}  — Ctrl+C per chiudere", flush=True)
+  print(f"CrazyScalata: {url}  edizione {edizione}, dati in {args.data_dir}, PDF in {out_dir}  — Ctrl+C per chiudere", flush=True)
   if not args.no_browser:
     threading.Timer(1.0, webbrowser.open, [url]).start()
   app.run(host="127.0.0.1", port=args.port, debug=False)
