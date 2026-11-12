@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+{% if anteprima %}
+  {% set ok = anteprima|selectattr('stato', 'equalto', 'ok')|list|length %}
+  {% set cor = anteprima|selectattr('stato', 'equalto', 'sovrascrive')|list|length %}
+  {% set err = anteprima|selectattr('stato', 'equalto', 'errore')|list|length %}
+  {% set da_salvare = ok + cor %}
+{% else %}
+  {% set da_salvare = 0 %}
+{% endif %}
+
+<p><a href="{{ url_for('tempi') }}">← Tutti i tempi</a></p>
+
+<form method="post" class="card fase-{{ fase }} blocco">
+  <div class="fase-label">Aggiungi o correggi: <b>TEMPI {{ nome_fase|upper }}</b> <small class="muted">({{ count }} già inseriti)</small></div>
+  <div class="blocco-grid">
+    <div>
+      <textarea name="testo" id="testo" rows="12" spellcheck="false" autocomplete="off"
+                placeholder="63&#9;17:11&#10;64&#9;17:30,5&#10;12&#9;1:02:03.45"
+                {% if not da_salvare %}autofocus{% endif %}>{{ testo }}</textarea>
+      <p class="hint">Una riga per tempo: <b>pettorale</b> <kbd>Tab</kbd> <b>tempo</b> <kbd>Invio</kbd>
+        (vanno bene anche spazio o <code>;</code>, e l'incolla da Excel).
+        <kbd>⌘</kbd>+<kbd>Invio</kbd> per controllare, poi <kbd>Invio</kbd> per salvare.
+        Se un pettorale ha già un tempo {{ 'intermedio' if fase == 'intermedio' else 'finale' }}, viene corretto.</p>
+    </div>
+    <div class="blocco-actions">
+      <button class="btn" name="azione" value="controlla" id="controlla">Controlla <small>⌘↵</small></button>
+      {% if anteprima %}
+        <div class="stats">
+          <span><b>{{ ok }}</b> nuovi</span>
+          {% if cor %}<span class="warn"><b>{{ cor }}</b> correzioni</span>{% endif %}
+          {% if err %}<span class="bad"><b>{{ err }}</b> errori</span>{% endif %}
+        </div>
+        {% if da_salvare %}
+        <button class="btn primary big" name="azione" value="salva" autofocus>Salva {{ da_salvare }} tempi ⏎</button>
+        {% else %}
+        <p><b>Niente da salvare</b>: correggi le righe e ricontrolla.</p>
+        {% endif %}
+        {% if err %}<p class="hint">Le righe con errori non vengono salvate e restano nella casella.</p>{% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  {% if anteprima %}
+  <table class="list anteprima">
+    <thead><tr><th>Riga</th><th>Pett.</th><th>Nome</th><th>Digitato</th><th>Tempo</th><th></th></tr></thead>
+    {% for r in anteprima %}
+      <tr class="{{ r.stato }}">
+        <td class="num">{{ r.n }}</td>
+        <td class="num">{{ r.pettorale if r.pettorale is not none else '' }}</td>
+        <td>{{ r.nome }}</td>
+        <td><code>{{ r.testo }}</code></td>
+        <td class="num"><b>{{ format_time(r.ftempo) if r.ntempo else '' }}</b></td>
+        <td>{% if r.stato == 'ok' %}✓{% else %}<span class="tag {{ 'bad' if r.stato == 'errore' else 'warn' }}">{{ r.messaggio }}</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</form>
+{% endblock %}

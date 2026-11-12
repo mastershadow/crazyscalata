@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Import da Google Moduli</h1>
+
+{% if not preview %}
+<form method="post" enctype="multipart/form-data" class="card">
+  <p>Dal foglio delle risposte: <em>File → Scarica → Valori separati da virgola (.csv)</em>.
+     Puoi reimportarlo quante volte vuoi: le persone già presenti vengono aggiornate, non duplicate.
+     Pettorale, pagamento e note inseriti qui non vengono mai sovrascritti.</p>
+  <input type="file" name="file" accept=".csv,text/csv" required>
+  <button class="btn primary">Anteprima</button>
+</form>
+{% else %}
+  {% for e in preview.errori %}<div class="flash err">{{ e }}</div>{% endfor %}
+  {% if preview.colonne_mancanti %}
+    <div class="flash info">Colonne non presenti nel CSV (da completare a mano): {{ preview.colonne_mancanti|join(', ') }}</div>
+  {% endif %}
+
+  <div class="stats">
+    <span><b>{{ preview.nuovi|length }}</b> nuovi</span>
+    <span><b>{{ preview.modificati|length }}</b> da aggiornare</span>
+    <span><b>{{ preview.invariati }}</b> invariati</span>
+  </div>
+
+  {% if preview.nuovi %}
+  <h2>Nuovi</h2>
+  <table class="list">
+    <thead><tr><th>Cognome Nome</th><th>Nascita</th><th>Tipo</th><th>Sesso</th><th>Crazy</th><th>Pranzo</th></tr></thead>
+    {% for r in preview.nuovi %}
+      <tr><td>{{ r.cognome }} {{ r.nome }}</td><td>{{ format_date(r.datanascita) }}</td><td>{{ (r.tipo or '')|capitalize }}</td>
+          <td>{{ r.sesso or '' }}</td><td>{{ r.crazy or '' }}</td>
+          <td>{{ r.pranzo }}{% if r.ospiti_pranzo %} +{{ r.ospiti_pranzo }}{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  {% if preview.modificati %}
+  <h2>Da aggiornare</h2>
+  <table class="list">
+    <thead><tr><th>Cognome Nome</th><th>Modifiche</th></tr></thead>
+    {% for r, ch in preview.modificati %}
+      <tr><td>{{ r.cognome }} {{ r.nome }}</td>
+          <td>{% for f, (old, new) in ch.items() %}<div><b>{{ f }}</b>: {{ old if old is not none else '—' }} → {{ new if new is not none else '—' }}</div>{% endfor %}</td></tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+
+  <form method="post" class="actions">
+    {% if preview.nuovi or preview.modificati %}
+      <button class="btn primary" name="azione" value="conferma">Conferma import</button>
+    {% endif %}
+    <button class="btn" name="azione" value="annulla">Annulla</button>
+  </form>
+{% endif %}
+{% endblock %}

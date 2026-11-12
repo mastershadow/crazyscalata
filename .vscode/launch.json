@@ -5,6 +5,14 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "App",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "crazyscalata",
+      "args": ["--no-browser"],
+      "console": "integratedTerminal"
+    },
+    {
       "name": "Classifiche",
       "type": "debugpy",
       "request": "launch",

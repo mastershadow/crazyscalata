@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="azioni-tempi">
+  <a class="btn primary big fase-btn intermedio" href="{{ url_for('inserisci_tempi', fase='intermedio') }}">
+    Aggiungi o correggi intermedi <small>traguardo volante · {{ counts.intermedio }} inseriti</small></a>
+  <a class="btn primary big fase-btn arrivo" href="{{ url_for('inserisci_tempi', fase='arrivo') }}">
+    Aggiungi o correggi finali <small>arrivo · {{ counts.arrivo }} inseriti</small></a>
+</div>
+
+{% if not counts.intermedio or tv_primo %}
+<div class="card">
+  <b>Niente tempi intermedi?</b> Se (per esempio con la pioggia) si annota solo chi passa primo al traguardo volante, inserisci qui il suo pettorale.
+  <form method="post" action="{{ url_for('traguardo_volante') }}" class="bar" style="margin-top:12px">
+    <input name="pettorale" inputmode="numeric" placeholder="Pettorale del primo" value="{{ tv_primo.pettorale if tv_primo else '' }}" autocomplete="off">
+    <button class="btn">Salva</button>
+    {% if tv_primo %}<span>Primo: <b>{{ tv_primo.pettorale }} · {{ tv_primo.nome }} {{ tv_primo.cognome }}</b> (svuota e salva per toglierlo)</span>{% endif %}
+  </form>
+  {% if tv_primo and counts.intermedio %}<div class="flash err" style="margin:8px 0 0">Ci sono tempi intermedi: questo pettorale viene ignorato. Toglilo per evitare confusione.</div>{% endif %}
+</div>
+{% endif %}
+
+<h2>Tempi inseriti ({{ rows|length }} pettorali)</h2>
+<table class="list">
+  <thead><tr><th>Pett.</th><th>Cognome Nome</th><th>Tipo</th><th>Intermedio</th><th>Finale</th></tr></thead>
+  {% for r in rows %}
+    <tr>
+      <td class="num">{{ r.pettorale }}</td>
+      <td>{% if r.nome %}{{ r.cognome }} {{ r.nome }}{% else %}<span class="tag warn">pettorale non assegnato</span>{% endif %}</td>
+      <td>{{ (r.tipo or '')|capitalize }}</td>
+      {% for fase, t, f in (('intermedio', r.intermedio, r.f_intermedio), ('arrivo', r.arrivo, r.f_arrivo)) %}
+      <td class="num">
+        {% if t %}
+          <span class="tempo-cell"><b>{{ format_time(f) }}</b>
+          <form method="post" action="{{ url_for('elimina_tempo', fase=fase, pettorale=r.pettorale) }}"
+                onsubmit="return confirm('Cancellare il tempo {{ 'intermedio' if fase == 'intermedio' else 'finale' }} del pettorale {{ r.pettorale }}?')">
+            <button class="btn small" title="Cancella">✕</button></form></span>
+        {% else %}<span class="muted">—</span>{% endif %}
+      </td>
+      {% endfor %}
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="empty">Nessun tempo inserito</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

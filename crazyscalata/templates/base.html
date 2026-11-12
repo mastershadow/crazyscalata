@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}CrazyScalata {{ year }}{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header>
+    <strong>CrazyScalata {{ year }}</strong>
+    <nav>
+      {% set ep = request.endpoint %}
+      <a href="{{ url_for('iscritti') }}" class="{{ 'on' if ep in ('iscritti', 'nuovo', 'modifica') }}">Iscritti</a>
+      <a href="{{ url_for('import_csv') }}" class="{{ 'on' if ep == 'import_csv' }}">Import</a>
+      <a href="{{ url_for('tempi') }}" class="{{ 'on' if ep in ('tempi', 'inserisci_tempi') }}">Tempi</a>
+      <a href="{{ url_for('classifiche') }}" class="{{ 'on' if ep == 'classifiche' }}">Classifiche</a>
+      <a href="{{ url_for('backup_page') }}" class="{{ 'on' if ep == 'backup_page' }}">Backup</a>
+    </nav>
+  </header>
+  <main>
+    {% for cat, msg in get_flashed_messages(with_categories=true) %}
+      <div class="flash {{ cat }}">{{ msg }}</div>
+    {% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

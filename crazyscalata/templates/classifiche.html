@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% macro table(t) %}
+  <table class="list">
+    <thead><tr>{% for h in t.header %}<th>{{ h }}</th>{% endfor %}</tr></thead>
+    {% for row in t.righe %}<tr>{% for c in row %}<td>{{ c }}</td>{% endfor %}</tr>
+    {% else %}<tr><td colspan="{{ t.header|length }}" class="empty">Nessun dato</td></tr>{% endfor %}
+  </table>
+{% endmacro %}
+{% block content %}
+<div class="bar">
+  <form method="post" action="{{ url_for('genera_pdf') }}"><button class="btn primary">Genera PDF</button></form>
+  {% if files %}<span class="files">In <code>out/{{ year }}/</code>: {% for f in files %}<a href="{{ url_for('pdf', name=f) }}" target="_blank">{{ f }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</span>{% endif %}
+</div>
+
+{% if senza_tempo %}
+<div class="flash info">Con pettorale ma senza tempo, esclusi da classifiche e premi ({{ senza_tempo|length }}):
+  {% for r in senza_tempo %}{{ r.pettorale }} {{ r.cognome }}{% if not loop.last %}, {% endif %}{% endfor %}</div>
+{% endif %}
+
+{% if not has_intermedi %}
+<div class="flash info">Nessun tempo intermedio: le classifiche del traguardo volante non vengono generate.
+  {% if not tv_primo %}Se c'è solo il primo, inseriscilo in <a href="{{ url_for('tempi') }}">Tempi</a>.{% endif %}</div>
+{% endif %}
+
+<nav class="tabs">
+  <a href="#premi"><b>Premi</b></a>
+  {% for t in classifiche %}<a href="#c{{ loop.index }}">{{ t.titolo }}</a>{% endfor %}
+</nav>
+
+<h1 id="premi">Premi</h1>
+{% for t in premi %}
+  <h2>{{ t.titolo }} <small>{{ t.sottotitolo }}</small></h2>
+  {{ table(t) }}
+{% endfor %}
+
+<h1>Classifiche</h1>
+{% for t in classifiche %}
+  <h2 id="c{{ loop.index }}">{{ t.titolo }} <small>{{ t.sottotitolo }}</small></h2>
+  {{ table(t) }}
+{% endfor %}
+{% endblock %}

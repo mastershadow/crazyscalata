@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% macro choice(name, options) %}
+  <div class="choice">
+    {% for value, label in options %}
+      <label><input type="radio" name="{{ name }}" value="{{ value }}" {% if (form[name] or '') == value %}checked{% endif %}> {{ label }}</label>
+    {% endfor %}
+  </div>
+{% endmacro %}
+{% block content %}
+<h1>{{ 'Modifica iscritto' if iid else 'Nuovo iscritto' }}</h1>
+{% for e in errors %}<div class="flash err">{{ e }}</div>{% endfor %}
+
+<form method="post" class="card form">
+  <label>Nome <input name="nome" value="{{ form.nome or '' }}" required autofocus></label>
+  <label>Cognome <input name="cognome" value="{{ form.cognome or '' }}"></label>
+  <label>Data di nascita <input type="date" name="datanascita" value="{{ form.datanascita or '' }}"></label>
+  <label>Pettorale <input name="pettorale" inputmode="numeric" value="{{ form.pettorale if form.pettorale is not none else '' }}"></label>
+  <div class="field"><span>Tipologia</span>{{ choice('tipo', [('CICLISTA', 'Ciclista'), ('PODISTA', 'Podista'), ('', '?')]) }}</div>
+  <div class="field"><span>Sesso</span>{{ choice('sesso', [('M', 'M'), ('F', 'F'), ('', '?')]) }}</div>
+  <div class="field"><span>Crazy</span>{{ choice('crazy', [('SI', 'Sì'), ('NO', 'No'), ('', '?')]) }}</div>
+  <div class="field"><span>Pranzo</span>{{ choice('pranzo', [('SI', 'Sì'), ('NO', 'No')]) }}</div>
+  <label>Ospiti al pranzo <input type="number" min="0" name="ospiti_pranzo" value="{{ form.ospiti_pranzo or 0 }}"></label>
+  <label class="check"><input type="checkbox" name="pagato" value="1" {% if form.pagato %}checked{% endif %}> Pagato</label>
+  <label class="wide">Note <input name="note" value="{{ form.note or '' }}"></label>
+  <div class="actions wide">
+    <button class="btn primary">Salva</button>
+    <a class="btn" href="{{ url_for('iscritti') }}">Annulla</a>
+  </div>
+</form>
+
+{% if iid %}
+<form method="post" action="{{ url_for('elimina', iid=iid) }}" onsubmit="return confirm('Eliminare questo iscritto?')">
+  <button class="btn danger">Elimina iscritto</button>
+</form>
+{% endif %}
+{% endblock %}

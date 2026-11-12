@@ -9,7 +9,7 @@
 	"onCreateCommand": "sudo apt-get update && sudo apt-get install -y --no-install-recommends sqlite3 && sudo rm -rf /var/lib/apt/lists/*",
 
 	// Install the project's Python dependencies.
-	"postCreateCommand": "pip3 install --user -r requirements.txt",
+	"postCreateCommand": "pip3 install --user -r requirements-dev.txt",
 
 	"customizations": {
 		"vscode": {
@@ -20,8 +20,8 @@
 		}
 	}
 
-	// Use 'forwardPorts' to make a list of ports inside the container available locally.
-	// "forwardPorts": [],
+	// The app (python3 -m crazyscalata) listens on 8765.
+	"forwardPorts": [8765],
 
 	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
 	// "remoteUser": "root"

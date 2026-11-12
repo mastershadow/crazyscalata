@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="bar">
+  <input id="cerca" type="search" placeholder="Cerca nome, cognome o pettorale…" autofocus autocomplete="off">
+  <a class="btn primary" href="{{ url_for('nuovo') }}">+ Nuovo iscritto</a>
+</div>
+
+<div class="stats">
+  <span><b>{{ stats.totale }}</b> iscritti</span>
+  <span><b>{{ stats.pagati }}</b> pagati</span>
+  <span><b>{{ stats.con_pettorale }}</b> con pettorale</span>
+  <span><b>{{ stats.pranzi }}</b> pranzi</span>
+  {% if stats.incompleti %}<span class="warn"><b>{{ stats.incompleti }}</b> da completare</span>{% endif %}
+  <label class="filter"><input type="checkbox" id="solo-incompleti"> solo da completare</label>
+</div>
+
+<table class="list" id="iscritti">
+  <thead><tr>
+    <th>Pett.</th><th>Cognome Nome</th><th>Nascita</th><th>Tipo</th><th>Sesso</th><th>Crazy</th>
+    <th>Pranzo</th><th>Pagato</th><th></th>
+  </tr></thead>
+  <tbody>
+  {% for r in rows %}
+    {% set miss = missing(r) %}
+    <tr id="i{{ r.id }}" data-search="{{ r.cognome }} {{ r.nome }} {{ r.pettorale or '' }}" {% if miss %}data-incompleto{% endif %}>
+      <td class="num">{{ r.pettorale or '' }}</td>
+      <td><a href="{{ url_for('modifica', iid=r.id) }}">{{ r.cognome }} {{ r.nome }}</a>
+        {% if miss %}<span class="tag warn" title="Manca: {{ miss|join(', ') }}">manca {{ miss|join(', ') }}</span>{% endif %}
+        {% if r.arrivato %}<span class="tag">arrivato</span>{% endif %}
+      </td>
+      <td>{{ format_date(r.datanascita) }}</td>
+      <td>{{ (r.tipo or '')|capitalize }}</td>
+      <td>{{ r.sesso or '' }}</td>
+      <td>{{ r.crazy or '' }}</td>
+      <td>{{ r.pranzo }}{% if r.pranzo == 'SI' and r.ospiti_pranzo %} +{{ r.ospiti_pranzo }}{% endif %}</td>
+      <td>
+        <form method="post" action="{{ url_for('toggle_pagato', iid=r.id) }}">
+          <button class="pill {{ 'yes' if r.pagato else 'no' }}">{{ 'Pagato' if r.pagato else 'Da pagare' }}</button>
+        </form>
+      </td>
+      <td><a class="btn small" href="{{ url_for('modifica', iid=r.id) }}">Modifica</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="9" class="empty">Nessun iscritto. <a href="{{ url_for('import_csv') }}">Importa il CSV del modulo</a> o aggiungine uno.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
