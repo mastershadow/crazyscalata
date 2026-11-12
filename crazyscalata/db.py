@@ -66,12 +66,30 @@ CREATE VIEW IF NOT EXISTS passaggi AS
 FASI = {"intermedio": "intermedi", "arrivo": "tempi"}
 
 
+SCHEMA_VERSION = 1
+
+
 def connect(path: str | Path) -> sqlite3.Connection:
   db = sqlite3.connect(str(path))
   db.row_factory = sqlite3.Row
   db.execute("PRAGMA foreign_keys = ON")
   db.executescript(SCHEMA)
+  _migrate(db)
   return db
+
+
+def _migrate(db: sqlite3.Connection):
+  v = db.execute("PRAGMA user_version").fetchone()[0]
+  if v < 1:
+    # v1: chiave persona indipendente dall'ordine nome/cognome; in caso di collisione resta la vecchia
+    for r in db.execute("SELECT id, nome, cognome, datanascita FROM iscritti").fetchall():
+      try:
+        db.execute("UPDATE iscritti SET chiave = ? WHERE id = ?", (make_key(r["nome"], r["cognome"], r["datanascita"]), r["id"]))
+      except sqlite3.IntegrityError:
+        pass
+  if v < SCHEMA_VERSION:
+    db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+    db.commit()
 
 
 def now() -> str:
@@ -84,9 +102,34 @@ def _fold(s: str) -> str:
   return " ".join(s.lower().split())
 
 
+def name_tokens(nome: str, cognome: str = "") -> list[str]:
+  """Parole del nome completo, normalizzate e in ordine alfabetico (l'ordine nome/cognome non conta)."""
+  return sorted(_fold(f"{nome} {cognome}").replace("'", " ").replace("-", " ").split())
+
+
 def make_key(nome: str, cognome: str, datanascita: str | None) -> str:
-  """Chiave che identifica una persona tra un import e l'altro."""
-  return f"{_fold(cognome)}|{_fold(nome)}|{datanascita or ''}"
+  """Chiave che identifica una persona tra un import e l'altro, e tra un'edizione e l'altra.
+
+  Nome e cognome invertiti danno la stessa chiave: serve anche per l'Excel 2025, dove nome e
+  cognome sono in un'unica colonna in ordine variabile."""
+  return f"{' '.join(name_tokens(nome, cognome))}|{datanascita or ''}"
+
+
+def possibili_doppioni(persone: list[dict]) -> list[tuple[dict, dict, str]]:
+  """Coppie di persone (con chiavi nome, cognome, datanascita) che potrebbero essere la stessa:
+  stessa data di nascita e nome simile, oppure stesso nome e data diversa."""
+  from difflib import SequenceMatcher
+  out = []
+  for i, a in enumerate(persone):
+    na = " ".join(name_tokens(a["nome"], a["cognome"]))
+    for b in persone[i + 1:]:
+      nb = " ".join(name_tokens(b["nome"], b["cognome"]))
+      if a["datanascita"] and a["datanascita"] == b["datanascita"]:
+        if na != nb and SequenceMatcher(None, na, nb).ratio() >= 0.75:
+          out.append((a, b, "stessa data di nascita, nome simile"))
+      elif na == nb:
+        out.append((a, b, "stesso nome, data di nascita diversa"))
+  return out
 
 
 def tidy_name(s: str) -> str:

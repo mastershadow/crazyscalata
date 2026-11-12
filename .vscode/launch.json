@@ -1,7 +1,6 @@
 {
-  // Use IntelliSense to learn about possible attributes.
-  // Hover to view descriptions of existing attributes.
-  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  // Configurazioni di avvio/debug (Esegui e debug, F5).
+  // L'app ascolta su http://127.0.0.1:8765 (porta inoltrata dal devcontainer).
   "version": "0.2.0",
   "configurations": [
     {
@@ -10,23 +9,82 @@
       "request": "launch",
       "module": "crazyscalata",
       "args": ["--no-browser"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "App: scegli edizione",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "crazyscalata",
+      "args": ["--no-browser", "--year", "${input:anno}"],
+      "cwd": "${workspaceFolder}",
       "console": "integratedTerminal"
     },
     {
-      "name": "Classifiche",
+      "name": "App: dati di prova (data/prova)",
       "type": "debugpy",
       "request": "launch",
-      "program": "classifiche.py",
-      "args": ["data/crazyscalata.xlsx"],
+      "module": "crazyscalata",
+      "args": ["--no-browser", "--data-dir", "data/prova", "--port", "8766"],
+      "cwd": "${workspaceFolder}",
       "console": "integratedTerminal"
     },
     {
-      "name": "Test Classifiche",
+      "name": "App: reset PIN",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "crazyscalata",
+      "args": ["--no-browser", "--reset-pin"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Classifiche da Excel (data/crazyscalata.xlsx)",
       "type": "debugpy",
       "request": "launch",
       "program": "classifiche.py",
-      "args": ["data/sample.xlsx"],
+      "args": ["data/crazyscalata.xlsx", "--year", "${input:anno}"],
+      "cwd": "${workspaceFolder}",
       "console": "integratedTerminal"
+    },
+    {
+      "name": "Classifiche da Excel di esempio (out/prova)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "classifiche.py",
+      "args": ["data/sample.xlsx", "--out", "out/prova"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Test: tutti",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["-q"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "Test: file aperto",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["-q", "${file}"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ],
+  "inputs": [
+    {
+      "id": "anno",
+      "type": "promptString",
+      "description": "Anno dell'edizione",
+      "default": "2026"
     }
   ]
 }

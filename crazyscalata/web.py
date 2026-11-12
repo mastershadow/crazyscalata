@@ -1,4 +1,9 @@
-"""Web app locale (Flask) per il giorno dell'evento."""
+"""Web app locale (Flask) per il giorno dell'evento.
+
+Un'unica app per tutte le edizioni: l'edizione aperta (app.config["YEAR"]) sceglie il database
+data/crazyscalata-<anno>.sqlite. L'accesso è protetto da un PIN (vedi config.py); al primo
+avvio si imposta il PIN.
+"""
 from __future__ import annotations
 
 import datetime
@@ -7,30 +12,53 @@ import time
 from pathlib import Path
 
 from flask import (Flask, abort, flash, g, jsonify, redirect, render_template, request,
-                   send_from_directory, url_for)
+                   send_from_directory, session, url_for)
 
 from . import db as dbm
-from . import excel, importer, inserimento, rankings
+from . import edizioni, excel, importer, inserimento, rankings
+from .config import Config
 from .tempi import format_time
 
 BACKUP_EVERY_S = 300
 BACKUP_KEEP = 50
 
 
-def create_app(db_path: str | Path, year: int, out_dir: str | Path, backup_dir: str | Path) -> Flask:
+SESSION_HOURS = 14  # una giornata di gara
+PUBLIC_ENDPOINTS = {"static", "login", "pin"}
+
+
+def create_app(data_dir: str | Path, out_dir: str | Path, backup_dir: str | Path | None = None,
+               anno: int | None = None) -> Flask:
+  """`anno`: edizione da aprire (creata se non esiste); altrimenti l'ultima aperta o la più recente."""
+  data_dir = Path(data_dir).absolute()
+  cfg = Config(data_dir)
+  if anno is not None and anno not in edizioni.elenco(data_dir):
+    edizioni.crea(data_dir, anno)
+  esistenti = edizioni.elenco(data_dir)
+  if anno is None:
+    anno = cfg.edizione if cfg.edizione in esistenti else (esistenti[0] if esistenti else None)
+  if anno is not None and cfg.edizione != anno:
+    cfg.edizione = anno
+
   app = Flask(__name__)
   app.config.update(
-    SECRET_KEY="crazyscalata-offline",  # solo per i messaggi flash, l'app ascolta in locale
-    DB_PATH=str(db_path), YEAR=year, OUT_DIR=Path(out_dir).absolute(),
-    BACKUP_DIR=Path(backup_dir).absolute(), PENDING_IMPORT=Path(db_path).with_suffix(".import.csv"),
+    SECRET_KEY=cfg.secret_key, DATA_DIR=data_dir, YEAR=anno, OUT_DIR=Path(out_dir).absolute(),
+    BACKUP_DIR=Path(backup_dir).absolute() if backup_dir else data_dir / "backup",
     MAX_CONTENT_LENGTH=10 * 1024 * 1024,
+    PERMANENT_SESSION_LIFETIME=datetime.timedelta(hours=SESSION_HOURS),
   )
-  app.jinja_env.globals.update(year=year, format_time=format_time, format_date=rankings.format_date)
+  app.jinja_env.globals.update(format_time=format_time, format_date=rankings.format_date)
   _last_backup = [0.0]
+
+  def db_path() -> Path:
+    return edizioni.path(data_dir, app.config["YEAR"])
+
+  def pending_import() -> Path:
+    return db_path().with_suffix(".import.csv")
 
   def get_db() -> sqlite3.Connection:
     if "db" not in g:
-      g.db = dbm.connect(app.config["DB_PATH"])
+      g.db = dbm.connect(db_path())
     return g.db
 
   @app.teardown_appcontext
@@ -39,12 +67,118 @@ def create_app(db_path: str | Path, year: int, out_dir: str | Path, backup_dir: 
     if d is not None:
       d.close()
 
+  @app.context_processor
+  def globals_():
+    return {"year": app.config["YEAR"], "logged_in": session.get("pin") == cfg.pin_version and cfg.has_pin}
+
+  # ---------- accesso con PIN ----------
+
+  @app.before_request
+  def require_pin():
+    if request.endpoint in PUBLIC_ENDPOINTS:
+      return None
+    if not cfg.has_pin:
+      return redirect(url_for("pin"))
+    if session.get("pin") != cfg.pin_version:
+      return redirect(url_for("login", next=request.full_path if request.method == "GET" else None))
+    if app.config["YEAR"] is None and request.endpoint != "edizioni_page" and request.endpoint != "logout":
+      return redirect(url_for("edizioni_page"))
+    return None
+
+  def _login():
+    session.clear()
+    session.permanent = True
+    session["pin"] = cfg.pin_version
+
+  @app.route("/login", methods=["GET", "POST"])
+  def login():
+    if not cfg.has_pin:
+      return redirect(url_for("pin"))
+    nxt = request.values.get("next") or ""
+    if not nxt.startswith("/") or nxt.startswith("//"):
+      nxt = url_for("iscritti")
+    if request.method == "POST":
+      if cfg.check_pin(request.form.get("pin", "")):
+        _login()
+        return redirect(nxt)
+      time.sleep(1)  # rallenta i tentativi
+      flash("PIN errato", "err")
+    return render_template("login.html", next=nxt)
+
+  @app.post("/logout")
+  def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+  @app.route("/pin", methods=["GET", "POST"])
+  def pin():
+    """Primo avvio: imposta il PIN. Dopo: cambio PIN (serve quello attuale, ed essere entrati)."""
+    primo = not cfg.has_pin
+    if not primo and session.get("pin") != cfg.pin_version:
+      return redirect(url_for("login", next=url_for("pin")))
+    if request.method == "POST":
+      f = request.form
+      if not primo and not cfg.check_pin(f.get("attuale", "")):
+        time.sleep(1)
+        flash("PIN attuale errato", "err")
+      elif f.get("pin", "") != f.get("pin2", ""):
+        flash("I due PIN non coincidono", "err")
+      else:
+        try:
+          cfg.set_pin(f.get("pin", ""))
+        except ValueError as e:
+          flash(str(e), "err")
+        else:
+          _login()
+          flash("PIN impostato" if primo else "PIN cambiato", "ok")
+          return redirect(url_for("iscritti"))
+    return render_template("pin.html", primo=primo)
+
+  # ---------- edizioni ----------
+
+  @app.route("/edizioni", methods=["GET", "POST"])
+  def edizioni_page():
+    if request.method == "POST":
+      f = request.form
+      anno_s = f.get("anno", "").strip()
+      if not (anno_s.isdigit() and 2000 <= int(anno_s) <= 2100):
+        flash("Anno non valido", "err")
+        return redirect(url_for("edizioni_page"))
+      a = int(anno_s)
+      try:
+        if f.get("azione") == "nuova":
+          edizioni.crea(data_dir, a)
+          flash(f"Creata l'edizione {a}", "ok")
+        elif f.get("azione") == "excel":
+          file = request.files.get("file")
+          if not file or not file.filename:
+            raise ValueError("Scegli il file Excel")
+          tmp = data_dir / f"upload-{a}.xlsx"
+          file.save(tmp)
+          try:
+            edizioni.crea_da_excel(data_dir, a, tmp)
+          finally:
+            tmp.unlink(missing_ok=True)
+          flash(f"Creata l'edizione {a} dall'Excel", "ok")
+        elif a not in edizioni.elenco(data_dir):
+          raise ValueError(f"L'edizione {a} non esiste")
+      except Exception as e:  # anche errori di lettura dell'Excel
+        flash(str(e) or "Errore", "err")
+        return redirect(url_for("edizioni_page"))
+      app.config["YEAR"] = a
+      cfg.edizione = a
+      flash(f"Edizione {a} aperta", "ok")
+      return redirect(url_for("iscritti"))
+    elenco = [edizioni.riepilogo(data_dir, a) for a in edizioni.elenco(data_dir)]
+    proposta = max([datetime.date.today().year] + [e["anno"] + 1 for e in elenco])
+    return render_template("edizioni.html", elenco=elenco, proposta=proposta)
+
   def backup(force: bool = False) -> Path | None:
     if not force and time.time() - _last_backup[0] < BACKUP_EVERY_S:
       return None
     bdir: Path = app.config["BACKUP_DIR"]
     bdir.mkdir(parents=True, exist_ok=True)
-    dest = bdir / f"{Path(app.config['DB_PATH']).stem}-{datetime.datetime.now():%Y%m%d-%H%M%S}.sqlite"
+    dest = bdir / f"{db_path().stem}-{datetime.datetime.now():%Y%m%d-%H%M%S}.sqlite"
     with sqlite3.connect(str(dest)) as target:
       get_db().backup(target)
     _last_backup[0] = time.time()
@@ -71,7 +205,8 @@ def create_app(db_path: str | Path, year: int, out_dir: str | Path, backup_dir: 
       "pranzi": sum((1 + r["ospiti_pranzo"]) if r["pranzo"] == "SI" else 0 for r in rows),
       "incompleti": sum(1 for r in rows if _missing(r)),
     }
-    return render_template("iscritti.html", rows=rows, stats=stats, missing=_missing)
+    doppioni = dbm.possibili_doppioni([dict(r) for r in rows])
+    return render_template("iscritti.html", rows=rows, stats=stats, missing=_missing, doppioni=doppioni)
 
   @app.route("/iscritti/nuovo", methods=["GET", "POST"])
   def nuovo():
@@ -121,6 +256,17 @@ def create_app(db_path: str | Path, year: int, out_dir: str | Path, backup_dir: 
       if row and row["pettorale"] is not None and row["pettorale"] != form["pettorale"]:
         if _has_times(d, row["pettorale"]):
           errors.append(f"Il pettorale {row['pettorale']} ha già un tempo registrato: cancellalo prima di cambiare pettorale")
+      presi = []
+      if not errors and iid is None:
+        # persona già vista in un'edizione precedente: completo i campi lasciati vuoti
+        h = storico_per([form["chiave"]]).get(form["chiave"])
+        for k in edizioni.STORICO_CAMPI:
+          if h and form[k] is None and h.get(k):
+            form[k] = h[k]
+            presi.append(k)
+        if presi:
+          flash(f"{', '.join('tipologia' if k == 'tipo' else k for k in presi).capitalize()} "
+                f"presi dall'edizione {h['anno']}: controlla", "info")
       if not errors:
         cols = ("chiave", "nome", "cognome", "datanascita", "tipo", "sesso", "crazy", "pettorale",
                 "pranzo", "ospiti_pranzo", "pagato", "note")
@@ -159,12 +305,16 @@ def create_app(db_path: str | Path, year: int, out_dir: str | Path, backup_dir: 
 
   # ---------- import ----------
 
+  def storico_per(chiavi: list[str]) -> dict[str, dict]:
+    return edizioni.storico(data_dir, app.config["YEAR"], chiavi)
+
   @app.route("/import", methods=["GET", "POST"])
   def import_csv():
-    pending: Path = app.config["PENDING_IMPORT"]
+    pending = pending_import()
     if request.method == "POST":
       if request.form.get("azione") == "conferma" and pending.exists():
-        p = importer.apply(get_db(), pending.read_text(encoding="utf-8"))
+        text = pending.read_text(encoding="utf-8")
+        p = importer.apply(get_db(), text, storico_per(importer.chiavi(text)))
         pending.unlink()
         flash(f"Import completato: {len(p.nuovi)} nuovi, {len(p.modificati)} aggiornati", "ok")
         return redirect(url_for("iscritti"))
@@ -182,8 +332,13 @@ def create_app(db_path: str | Path, year: int, out_dir: str | Path, backup_dir: 
         text = raw.decode("latin-1")
       pending.parent.mkdir(parents=True, exist_ok=True)
       pending.write_text(text, encoding="utf-8")
-    preview = importer.preview(get_db(), pending.read_text(encoding="utf-8")) if pending.exists() else None
-    return render_template("import.html", preview=preview)
+    preview = None
+    if pending.exists():
+      text = pending.read_text(encoding="utf-8")
+      preview = importer.preview(get_db(), text, storico_per(importer.chiavi(text)))
+    anno = app.config["YEAR"]
+    anno_sbagliato = bool(preview and preview.anni_risposte and not {anno, anno - 1} & set(preview.anni_risposte))
+    return render_template("import.html", preview=preview, anno_sbagliato=anno_sbagliato)
 
   # ---------- tempi ----------
   # /tempi: riepilogo di intermedi e finali per pettorale.
@@ -292,7 +447,7 @@ def create_app(db_path: str | Path, year: int, out_dir: str | Path, backup_dir: 
   def backup_page():
     bdir: Path = app.config["BACKUP_DIR"]
     files = sorted(bdir.glob("*.sqlite"), reverse=True) if bdir.exists() else []
-    return render_template("backup.html", files=files, db_path=app.config["DB_PATH"])
+    return render_template("backup.html", files=files, db_path=db_path())
 
   @app.post("/backup")
   def backup_now():

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Edizioni</h1>
+
+{% if elenco %}
+<div class="edizioni-list">
+  {% for e in elenco %}
+  <form method="post">
+    <input type="hidden" name="anno" value="{{ e.anno }}">
+    <button class="btn {{ 'corrente' if e.anno == year }}" name="azione" value="apri">
+      <b>{{ e.anno }}</b>{{ e.iscritti }} iscritti · {{ e.arrivi }} arrivi{% if e.intermedi %} · {{ e.intermedi }} intermedi{% endif %}
+      {% if e.anno == year %}<br><small>aperta</small>{% endif %}
+    </button>
+  </form>
+  {% endfor %}
+</div>
+{% else %}
+<div class="flash info">Nessuna edizione: creane una per iniziare.</div>
+{% endif %}
+
+<div class="card">
+  <h2 style="margin-top:0">Nuova edizione</h2>
+  <form method="post" class="bar">
+    <input name="anno" value="{{ proposta }}" inputmode="numeric" size="6" required>
+    <button class="btn primary" name="azione" value="nuova">Crea e apri</button>
+  </form>
+  <p class="hint">Ogni edizione ha il suo archivio (<code>data/crazyscalata-&lt;anno&gt;.sqlite</code>) e i suoi PDF (<code>out/&lt;anno&gt;/</code>).
+    Le edizioni precedenti servono a completare sesso e crazy di chi torna.</p>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Edizione da Excel</h2>
+  <form method="post" enctype="multipart/form-data" class="bar">
+    <input name="anno" placeholder="Anno" inputmode="numeric" size="6" required>
+    <input type="file" name="file" accept=".xlsx" required>
+    <button class="btn" name="azione" value="excel">Crea dall'Excel</button>
+  </form>
+  <p class="hint">Per gli anni gestiti con l'Excel (come il 2025): fogli ISCRITTI e TEMPI nel formato di <code>data/template.xlsx</code>.</p>
+</div>
+{% endblock %}

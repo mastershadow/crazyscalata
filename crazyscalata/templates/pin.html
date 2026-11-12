@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<form method="post" class="card narrow">
+  <h1>{{ 'Imposta il PIN' if primo else 'Cambia PIN' }}</h1>
+  {% if primo %}<p>Primo avvio: scegli il PIN per entrare nell'app (almeno 4 caratteri). Servirà ogni giorno di gara.</p>{% endif %}
+  {% if not primo %}<label>PIN attuale <input type="password" name="attuale" inputmode="numeric" autocomplete="current-password" autofocus required></label>{% endif %}
+  <label>Nuovo PIN <input type="password" name="pin" inputmode="numeric" autocomplete="new-password" minlength="4" {% if primo %}autofocus{% endif %} required></label>
+  <label>Ripeti il nuovo PIN <input type="password" name="pin2" inputmode="numeric" autocomplete="new-password" minlength="4" required></label>
+  <button class="btn primary big">Salva</button>
+  {% if not primo %}<p class="hint">Cambiando il PIN si esce da tutte le sessioni aperte.</p>{% endif %}
+</form>
+{% endblock %}

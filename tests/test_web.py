@@ -5,11 +5,23 @@ from crazyscalata.web import create_app
 from .test_core import HEADER, ROW1, ROW2
 
 
+PIN = "2468"
+
+
+def make_client(tmp_path, anno=2026):
+  app = create_app(tmp_path / "data", tmp_path / "out", anno=anno)
+  app.config["TESTING"] = True
+  c = app.test_client()
+  if not (tmp_path / "data" / "config.json").exists() or '"pin_hash"' not in (tmp_path / "data" / "config.json").read_text():
+    c.post("/pin", data={"pin": PIN, "pin2": PIN})
+  else:
+    c.post("/login", data={"pin": PIN})
+  return c
+
+
 @pytest.fixture
 def client(tmp_path):
-  app = create_app(tmp_path / "t.sqlite", 2026, tmp_path / "out", tmp_path / "backup")
-  app.config["TESTING"] = True
-  return app.test_client()
+  return make_client(tmp_path)
 
 
 def test_event_day_flow(client, tmp_path):
@@ -92,7 +104,7 @@ def test_event_day_flow(client, tmp_path):
   assert "deve essere minore" in salva("intermedio", "12 5:00").text
 
   # backup automatico dopo le scritture + export Excel
-  assert list((tmp_path / "backup").glob("*.sqlite"))
+  assert list((tmp_path / "data" / "backup").glob("crazyscalata-2026-*.sqlite"))
   assert client.get("/export.xlsx").status_code == 200
   for page in ("/", "/import", "/tempi", "/backup", "/iscritti/1"):
     assert client.get(page).status_code == 200
@@ -128,3 +140,104 @@ def test_bulk_entry(client):
   # intermedio maggiore del finale: errore
   r = client.post("/tempi/intermedio", data={"testo": "1 4:00\n2 20:00", "azione": "controlla"})
   assert "<b>1</b> nuovi" in r.text and "deve essere minore" in r.text
+
+
+def test_pin(tmp_path, monkeypatch):
+  monkeypatch.setattr("time.sleep", lambda s: None)
+  app = create_app(tmp_path / "data", tmp_path / "out", anno=2026)
+  c = app.test_client()
+  # primo avvio: ogni pagina porta all'impostazione del PIN
+  assert c.get("/tempi").headers["Location"].endswith("/pin")
+  assert "Imposta il PIN" in c.get("/pin").text
+  assert "almeno 4" in c.post("/pin", data={"pin": "12", "pin2": "12"}).text
+  assert "non coincidono" in c.post("/pin", data={"pin": "1234", "pin2": "1235"}).text
+  assert "PIN impostato" in c.post("/pin", data={"pin": "1234", "pin2": "1234"}, follow_redirects=True).text
+  assert c.get("/tempi").status_code == 200
+
+  # un altro browser deve entrare col PIN, e torna alla pagina chiesta
+  c2 = app.test_client()
+  assert "/login" in c2.get("/tempi").headers["Location"]
+  assert "/pin" in c2.get("/pin").headers["Location"]  # cambiare PIN richiede di essere entrati
+  assert "PIN errato" in c2.post("/login", data={"pin": "0000", "next": "/tempi"}).text
+  r = c2.post("/login", data={"pin": "1234", "next": "/tempi"})
+  assert r.headers["Location"] == "/tempi"
+  assert c2.post("/login", data={"pin": "1234", "next": "//evil.example"}).headers["Location"] == "/"
+
+  # cambio PIN: serve quello attuale; le altre sessioni decadono
+  assert "PIN attuale errato" in c.post("/pin", data={"attuale": "9999", "pin": "5678", "pin2": "5678"}).text
+  assert "PIN cambiato" in c.post("/pin", data={"attuale": "1234", "pin": "5678", "pin2": "5678"}, follow_redirects=True).text
+  assert c.get("/tempi").status_code == 200
+  assert "/login" in c2.get("/tempi").headers["Location"]
+
+  c.post("/logout")
+  assert "/login" in c.get("/").headers["Location"]
+
+  # --reset-pin (si fa ad app chiusa, poi si riavvia)
+  from crazyscalata.config import Config
+  Config(tmp_path / "data").reset_pin()
+  c3 = create_app(tmp_path / "data", tmp_path / "out").test_client()
+  assert c3.get("/").headers["Location"].endswith("/pin")
+
+
+def test_edizioni(tmp_path):
+  # nessuna edizione: si va alla pagina Edizioni
+  app = create_app(tmp_path / "data", tmp_path / "out")
+  assert app.config["YEAR"] is None
+  c = app.test_client()
+  c.post("/pin", data={"pin": PIN, "pin2": PIN})
+  assert c.get("/").headers["Location"].endswith("/edizioni")
+  assert "Nessuna edizione" in c.get("/edizioni").text
+
+  # il 2025 dall'Excel (qui il campione), poi il 2026 nuovo
+  with open("data/sample.xlsx", "rb") as f:
+    r = c.post("/edizioni", data={"anno": "2025", "azione": "excel", "file": (f, "s.xlsx")},
+               content_type="multipart/form-data", follow_redirects=True)
+  assert "Creata l&#39;edizione 2025 dall&#39;Excel" in r.text and "CrazyScalata <b>2025</b>" in r.text
+  assert "Mario Rossi" in r.text
+  assert "esiste già" in c.post("/edizioni", data={"anno": "2025", "azione": "nuova"}, follow_redirects=True).text
+  r = c.post("/edizioni", data={"anno": "2026", "azione": "nuova"}, follow_redirects=True)
+  assert "CrazyScalata <b>2026</b>" in r.text and "Nessun iscritto" in r.text
+  assert (tmp_path / "data" / "crazyscalata-2026.sqlite").exists()
+
+  # l'edizione aperta resta tale al riavvio
+  assert create_app(tmp_path / "data", tmp_path / "out").config["YEAR"] == 2026
+  r = c.get("/edizioni").text
+  assert "12 iscritti" in r and "11 arrivi" in r
+
+  # import 2026: chi c'era nel 2025 riceve sesso e crazy (Mario Rossi nel campione: M; nel CSV nome e cognome invertiti)
+  from .test_core import HEADER
+  csv = (f"{HEADER}\n2026/02/01 9:00:00 am CET,a@b.it,Rossi,Mario,{_nascita(tmp_path, 'Mario Rossi')},Ciclista,NO,,Acconsento\n"
+         "2026/02/01 9:10:00 am CET,a@b.it,Nuovo,Arrivato,2001-01-01,Ciclista,NO,,Acconsento\n")
+  r = c.post("/import", data={"file": (__import__("io").BytesIO(csv.encode()), "f.csv")}, content_type="multipart/form-data")
+  assert 'title="dall\'edizione 2025">2025</span>' in r.text and "Le risposte sono del" not in r.text
+  c.post("/import", data={"azione": "conferma"})
+  import sqlite3
+  row = sqlite3.connect(tmp_path / "data" / "crazyscalata-2026.sqlite").execute(
+    "select sesso, crazy from iscritti where cognome = 'Mario'").fetchone()
+  assert row[0] == "M" and row[1] in ("SI", "NO")
+
+  # CSV di un altro anno: avviso
+  r = c.post("/import", data={"file": (__import__("io").BytesIO(csv.replace("2026/02", "2023/02").encode()), "f.csv")},
+             content_type="multipart/form-data")
+  assert "Le risposte sono del 2023" in r.text
+  c.post("/import", data={"azione": "annulla"})
+
+  # al banco: persona del 2025 senza sesso/crazy -> presi dal 2025
+  nome, cognome = "Anna", "Bianchi"
+  r = c.post("/iscritti/nuovo", data={"nome": cognome, "cognome": nome, "datanascita": _nascita(tmp_path, "Anna Bianchi"),
+                                      "pranzo": "NO"}, follow_redirects=True)
+  assert "presi dall&#39;edizione 2025" in r.text
+
+  # possibili doppioni nella lista
+  c.post("/iscritti/nuovo", data={"nome": "Arrivata", "cognome": "Nuova", "datanascita": "2001-01-01", "pranzo": "NO"})
+  assert "Possibili doppioni" in c.get("/").text
+
+  # torno al 2025
+  r = c.post("/edizioni", data={"anno": "2025", "azione": "apri"}, follow_redirects=True)
+  assert "CrazyScalata <b>2025</b>" in r.text and "Mario Rossi" in r.text
+
+
+def _nascita(tmp_path, nome):
+  import sqlite3
+  return sqlite3.connect(tmp_path / "data" / "crazyscalata-2025.sqlite").execute(
+    "select datanascita from iscritti where nome = ?", (nome,)).fetchone()[0]

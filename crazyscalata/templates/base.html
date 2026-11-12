@@ -8,7 +8,10 @@
 </head>
 <body>
   <header>
-    <strong>CrazyScalata {{ year }}</strong>
+    {% if logged_in %}
+    <a class="edizione" href="{{ url_for('edizioni_page') }}" title="Cambia edizione">
+      CrazyScalata <b>{{ year or '—' }}</b> <span class="muted">▾</span></a>
+    {% if year %}
     <nav>
       {% set ep = request.endpoint %}
       <a href="{{ url_for('iscritti') }}" class="{{ 'on' if ep in ('iscritti', 'nuovo', 'modifica') }}">Iscritti</a>
@@ -17,6 +20,14 @@
       <a href="{{ url_for('classifiche') }}" class="{{ 'on' if ep == 'classifiche' }}">Classifiche</a>
       <a href="{{ url_for('backup_page') }}" class="{{ 'on' if ep == 'backup_page' }}">Backup</a>
     </nav>
+    {% endif %}
+    <div class="account">
+      <a href="{{ url_for('pin') }}">Cambia PIN</a>
+      <form method="post" action="{{ url_for('logout') }}"><button class="btn small">Esci</button></form>
+    </div>
+    {% else %}
+    <strong>CrazyScalata</strong>
+    {% endif %}
   </header>
   <main>
     {% for cat, msg in get_flashed_messages(with_categories=true) %}

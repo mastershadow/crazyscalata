@@ -1,17 +1,28 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Import da Google Moduli</h1>
+<h1>Import da Google Moduli <small class="muted">nell'edizione {{ year }}</small></h1>
 
 {% if not preview %}
 <form method="post" enctype="multipart/form-data" class="card">
   <p>Dal foglio delle risposte: <em>File → Scarica → Valori separati da virgola (.csv)</em>.
      Puoi reimportarlo quante volte vuoi: le persone già presenti vengono aggiornate, non duplicate.
-     Pettorale, pagamento e note inseriti qui non vengono mai sovrascritti.</p>
+     Pettorale, pagamento e note inseriti qui non vengono mai sovrascritti.
+     Chi ha già partecipato (stesso nome e data di nascita) riceve sesso e crazy dell'ultima edizione, se il modulo non li dice.</p>
   <input type="file" name="file" accept=".csv,text/csv" required>
   <button class="btn primary">Anteprima</button>
 </form>
 {% else %}
   {% for e in preview.errori %}<div class="flash err">{{ e }}</div>{% endfor %}
+  {% if anno_sbagliato %}
+    <div class="flash err">Le risposte sono del {{ preview.anni_risposte|join(', ') }} ma è aperta l'edizione <b>{{ year }}</b>.
+      Se è l'edizione sbagliata, annulla e cambiala da <a href="{{ url_for('edizioni_page') }}">Edizioni</a>.</div>
+  {% endif %}
+  {% if preview.doppioni %}
+    <div class="flash info"><b>Possibili doppioni</b> (vengono importati comunque; controlla dopo):
+      <ul class="doppioni">{% for a, b, perche in preview.doppioni %}
+        <li>{{ a.cognome }} {{ a.nome }} ({{ format_date(a.datanascita) }}) e {{ b.cognome }} {{ b.nome }} ({{ format_date(b.datanascita) }}): {{ perche }}</li>
+      {% endfor %}</ul></div>
+  {% endif %}
   {% if preview.colonne_mancanti %}
     <div class="flash info">Colonne non presenti nel CSV (da completare a mano): {{ preview.colonne_mancanti|join(', ') }}</div>
   {% endif %}
@@ -28,7 +39,9 @@
     <thead><tr><th>Cognome Nome</th><th>Nascita</th><th>Tipo</th><th>Sesso</th><th>Crazy</th><th>Pranzo</th></tr></thead>
     {% for r in preview.nuovi %}
       <tr><td>{{ r.cognome }} {{ r.nome }}</td><td>{{ format_date(r.datanascita) }}</td><td>{{ (r.tipo or '')|capitalize }}</td>
-          <td>{{ r.sesso or '' }}</td><td>{{ r.crazy or '' }}</td>
+          {% for f in ('sesso', 'crazy') %}
+          <td>{{ r[f] or '' }}{% if r.da_storico[f] %} <span class="tag" title="dall'edizione {{ r.da_storico[f] }}">{{ r.da_storico[f] }}</span>{% endif %}</td>
+          {% endfor %}
           <td>{{ r.pranzo }}{% if r.ospiti_pranzo %} +{{ r.ospiti_pranzo }}{% endif %}</td></tr>
     {% endfor %}
   </table>

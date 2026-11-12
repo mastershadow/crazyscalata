@@ -18,6 +18,7 @@ def main():
   parser.add_argument('filename')
   parser.add_argument('--year', type=int, default=datetime.date.today().year,
                       help="anno dell'evento nei titoli dei PDF (default: anno corrente)")
+  parser.add_argument('--out', default="out", help="cartella dei PDF, scritti in <out>/<anno>/ (default: out)")
   args = parser.parse_args()
 
   # il database viene ricreato a ogni esecuzione e lasciato su disco per ispezionarlo
@@ -27,7 +28,7 @@ def main():
     pass
   db = dbm.connect(DEBUG_DB)
   excel.load(db, args.filename)
-  rankings.write_pdfs(db, args.year, "out")
+  rankings.write_pdfs(db, args.year, args.out)
   db.close()
 
 

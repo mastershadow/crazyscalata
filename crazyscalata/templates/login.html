@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<form method="post" class="card narrow">
+  <h1>Entra</h1>
+  <input type="hidden" name="next" value="{{ next }}">
+  <label>PIN <input type="password" name="pin" inputmode="numeric" autocomplete="current-password" autofocus required></label>
+  <button class="btn primary big">Entra</button>
+  <p class="hint">PIN dimenticato? Chiudi l'app e riavviala dal Terminale con
+    <code>./avvia.command --reset-pin</code>: al prossimo accesso ne imposti uno nuovo.</p>
+</form>
+{% endblock %}

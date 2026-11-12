@@ -1,12 +1,17 @@
 """Import delle iscrizioni dal CSV delle risposte di Google Moduli.
 
-Le persone sono riconosciute da cognome + nome + data di nascita (vedi db.make_key),
-non dall'email: più iscrizioni possono arrivare dallo stesso indirizzo.
+Le persone sono riconosciute da nome + cognome (in qualunque ordine) + data di nascita
+(vedi db.make_key), non dall'email: più iscrizioni possono arrivare dallo stesso indirizzo.
+Più risposte della stessa persona diventano una sola: vale l'ultima.
 
 Regole di aggiornamento su un iscritto già presente:
 - tipo, pranzo, ospiti, email, timestamp: vince il modulo (la persona può aver modificato la risposta);
 - sesso, crazy: dal modulo solo se in archivio sono vuoti;
 - pettorale, pagato, note: mai toccati (sono dati del banco).
+
+Se il modulo non dice sesso/crazy/tipologia, si propongono quelli delle edizioni precedenti
+(`storico`, vedi edizioni.storico). Le coppie che potrebbero essere la stessa persona scritta
+in modo diverso vengono segnalate (`doppioni`), non unite.
 """
 from __future__ import annotations
 
@@ -42,6 +47,8 @@ class Preview:
   invariati: int = 0
   errori: list[str] = field(default_factory=list)
   colonne_mancanti: list[str] = field(default_factory=list)
+  doppioni: list[tuple[dict, dict, str]] = field(default_factory=list)
+  anni_risposte: list[int] = field(default_factory=list)
 
 
 def _map_header(header: list[str]) -> dict[str, int]:
@@ -107,9 +114,28 @@ def _changes(old: sqlite3.Row, new: dict) -> dict:
   return ch
 
 
-def preview(db: sqlite3.Connection, text: str) -> Preview:
+def _apply_storico(records: list[dict], storico: dict[str, dict] | None):
+  for r in records:
+    r["da_storico"] = {}
+    h = (storico or {}).get(r["chiave"])
+    if not h:
+      continue
+    for f in ("sesso", "crazy", "tipo"):
+      if r[f] is None and h.get(f):
+        r[f] = h[f]
+        r["da_storico"][f] = h["anno"]
+
+
+def chiavi(text: str) -> list[str]:
+  return [r["chiave"] for r in parse_csv(text)[0]]
+
+
+def preview(db: sqlite3.Connection, text: str, storico: dict[str, dict] | None = None) -> Preview:
   records, errors, optional_missing = parse_csv(text)
+  _apply_storico(records, storico)
   p = Preview(errori=errors, colonne_mancanti=optional_missing)
+  p.anni_risposte = sorted({int(r["form_timestamp"][:4]) for r in records
+                            if r["form_timestamp"] and r["form_timestamp"][:4].isdigit()})
   for r in records:
     old = db.execute("SELECT * FROM iscritti WHERE chiave = ?", (r["chiave"],)).fetchone()
     if old is None:
@@ -120,11 +146,15 @@ def preview(db: sqlite3.Connection, text: str) -> Preview:
         p.modificati.append((r, ch))
       else:
         p.invariati += 1
+  # possibili doppioni: tra i nuovi, e tra i nuovi e chi è già in archivio
+  esistenti = [dict(r) for r in db.execute("SELECT id, nome, cognome, datanascita FROM iscritti")]
+  nuovi = [dict(r, nuovo=True) for r in p.nuovi]
+  p.doppioni = [(a, b, w) for a, b, w in dbm.possibili_doppioni(nuovi + esistenti) if a.get("nuovo") or b.get("nuovo")]
   return p
 
 
-def apply(db: sqlite3.Connection, text: str) -> Preview:
-  p = preview(db, text)
+def apply(db: sqlite3.Connection, text: str, storico: dict[str, dict] | None = None) -> Preview:
+  p = preview(db, text, storico)
   ts = dbm.now()
   for r in p.nuovi:
     cols = FORM_FIELDS + FILL_IF_EMPTY + ("chiave",)

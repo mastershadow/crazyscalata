@@ -14,6 +14,17 @@
   <label class="filter"><input type="checkbox" id="solo-incompleti"> solo da completare</label>
 </div>
 
+{% if doppioni %}
+<div class="flash info"><b>Possibili doppioni</b> (controlla ed elimina quello sbagliato):
+  <ul class="doppioni">
+  {% for a, b, perche in doppioni %}
+    <li><a href="{{ url_for('modifica', iid=a.id) }}">{{ a.cognome }} {{ a.nome }}</a> ({{ format_date(a.datanascita) }})
+      e <a href="{{ url_for('modifica', iid=b.id) }}">{{ b.cognome }} {{ b.nome }}</a> ({{ format_date(b.datanascita) }}): {{ perche }}</li>
+  {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
 <table class="list" id="iscritti">
   <thead><tr>
     <th>Pett.</th><th>Cognome Nome</th><th>Nascita</th><th>Tipo</th><th>Sesso</th><th>Crazy</th>
