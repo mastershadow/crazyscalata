@@ -8,6 +8,7 @@ from fpdf import FPDF
 
 db = None
 debug = True
+year = datetime.date.today().year
 
 def adapt_date_iso(val):
     return val.isoformat()
@@ -17,12 +18,19 @@ def main():
                     prog='Classifiche',
                     description='Classifiche CrazyScalata')
   parser.add_argument('filename')
+  parser.add_argument('--year', type=int, default=year,
+                      help="anno dell'evento nei titoli dei PDF (default: anno corrente)")
   args = parser.parse_args()
+  set_year(args.year)
   setup(args.filename)
   create_rankings()
   create_extra()
   db.close()
   
+def set_year(y: int):
+  global year
+  year = y
+
 def setup(fname: str):
   sqlite3.register_adapter(datetime.datetime, adapt_date_iso)
   create_db()
@@ -154,7 +162,7 @@ def create_extra():
   pdf.add_page()
   pdf.set_font("helvetica", style="B", size=16)
   pdf.set_font_size(18)
-  pdf.write(text="CrazyScalata 2025\n")
+  pdf.write(text=f"CrazyScalata {year}\n")
   pdf.set_font("helvetica", style="", size=12)
   pdf.write(10, "I più vicini alla media\n")
   pdf.write(10, f'Media di arrivo: {format_time(avg)}\n')
@@ -173,7 +181,7 @@ def create_ranking(name: str, data: list[list[str]]):
   pdf.add_page()
   pdf.set_font("helvetica", style="B", size=16)
   pdf.set_font_size(18)
-  pdf.write(text="CrazyScalata 2025\n")
+  pdf.write(text=f"CrazyScalata {year}\n")
   pdf.set_font("helvetica", style="", size=12)
   pdf.write(10, "Classifica " + name)
   pdf.write(text='\n\n')
