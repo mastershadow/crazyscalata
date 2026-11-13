@@ -91,7 +91,7 @@ def test_sample_rankings(tmp_path):
   files = rankings.write_pdfs(db, 2026, tmp_path)
   assert [f.name for f in files] == ["Crazy.pdf", "Assoluti.pdf", "Donne cicliste.pdf", "Podisti.pdf",
                                      "Donne podiste.pdf", "Traguardo volante Crazy.pdf", "Traguardo volante Tutti.pdf",
-                                     "Premi.pdf", "Pranzo.pdf"]
+                                     "Categorie speciali.pdf", "Pranzo.pdf"]
   tv = rankings.classifica(db, "TV", "1 = 1", "passaggi").righe
   assert len(tv) == len(ass) - 1  # uno senza intermedio
   assert all(f.parent == tmp_path / "2026" and f.stat().st_size > 0 for f in files)

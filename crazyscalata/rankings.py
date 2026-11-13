@@ -27,6 +27,7 @@ CLASSIFICHE = [
   ("Traguardo volante Crazy", "passaggi", "crazy = 'SI'"),
   ("Traguardo volante Tutti", "passaggi", "1 = 1"),
 ]
+SPECIALI = "Categorie speciali"  # nome mostrato per i premi secchi (pagina e PDF)
 PODIO = 5  # quanti nomi per i premi "secchi" (i vincitori li scelgono gli organizzatori)
 
 HEADER = ["Pos.", "Nome", "Pettorale", "Tempo", "Data nascita", "Tipo", "Crazy"]
@@ -228,7 +229,7 @@ def _table(pdf: FPDF, t: Tabella):
 
 
 def write_pdfs(db: sqlite3.Connection, year: int, out_dir: str | Path) -> list[Path]:
-  """Un PDF per classifica più Premi.pdf, in out_dir/<anno>/."""
+  """Un PDF per classifica più "Categorie speciali.pdf" (i premi secchi), in out_dir/<anno>/."""
   out = Path(out_dir) / str(year)
   out.mkdir(parents=True, exist_ok=True)
   files = []
@@ -241,7 +242,7 @@ def write_pdfs(db: sqlite3.Connection, year: int, out_dir: str | Path) -> list[P
   pdf = _new_pdf(year)
   for t in premi(db):
     _table(pdf, t)
-  p = out / "Premi.pdf"
+  p = out / f"{SPECIALI}.pdf"
   pdf.output(str(p))
   files.append(p)
   files.append(write_pranzo_pdf(db, year, out_dir))

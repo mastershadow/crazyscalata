@@ -13,7 +13,7 @@
 </div>
 
 {% if senza_tempo %}
-<div class="flash info">Con pettorale ma senza tempo, esclusi da classifiche e premi ({{ senza_tempo|length }}):
+<div class="flash info">Con pettorale ma senza tempo, esclusi da classifiche e categorie speciali ({{ senza_tempo|length }}):
   {% for r in senza_tempo %}{{ r.pettorale }} {{ r.cognome }}{% if not loop.last %}, {% endif %}{% endfor %}</div>
 {% endif %}
 
@@ -23,19 +23,19 @@
 {% endif %}
 
 <nav class="tabs">
-  <a href="#premi"><b>Premi</b></a>
   {% for t in classifiche %}<a href="#c{{ loop.index }}">{{ t.titolo }}</a>{% endfor %}
+  <a href="#speciali"><b>Categorie speciali</b></a>
 </nav>
-
-<h1 id="premi">Premi</h1>
-{% for t in premi %}
-  <h2>{{ t.titolo }} <small>{{ t.sottotitolo }}</small></h2>
-  {{ table(t) }}
-{% endfor %}
 
 <h1>Classifiche</h1>
 {% for t in classifiche %}
   <h2 id="c{{ loop.index }}">{{ t.titolo }} <small>{{ t.sottotitolo }}</small></h2>
+  {{ table(t) }}
+{% endfor %}
+
+<h1 id="speciali">Categorie speciali</h1>
+{% for t in premi %}
+  <h2>{{ t.titolo }} <small>{{ t.sottotitolo }}</small></h2>
   {{ table(t) }}
 {% endfor %}
 {% endblock %}

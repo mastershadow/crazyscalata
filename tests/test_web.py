@@ -94,7 +94,7 @@ def test_event_day_flow(client, tmp_path):
   assert r.text.index("Luca Verdi", ass) < r.text.index("Mario Rossi", ass)
   client.post("/classifiche/pdf")
   assert len(list((tmp_path / "out" / "2026").glob("*.pdf"))) == 9
-  assert client.get("/out/Premi.pdf").status_code == 200
+  assert client.get("/out/Categorie speciali.pdf").status_code == 200
 
   # traguardo volante: Mario (intermedio 1:30) primo, anche se all'arrivo è dietro a Luca
   tv = r.text.index(">Traguardo volante Tutti <small>")
