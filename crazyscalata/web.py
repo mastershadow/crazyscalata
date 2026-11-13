@@ -45,6 +45,9 @@ def create_app(data_dir: str | Path, out_dir: str | Path, backup_dir: str | Path
     SECRET_KEY=cfg.secret_key, DATA_DIR=data_dir, YEAR=anno, OUT_DIR=Path(out_dir).absolute(),
     BACKUP_DIR=Path(backup_dir).absolute() if backup_dir else data_dir / "backup",
     MAX_CONTENT_LENGTH=10 * 1024 * 1024,
+    # CSS/JS in cache per un anno: l'URL cambia con la data del file (vedi static_version),
+    # così ogni pagina è una sola richiesta (conta col port forwarding del devcontainer)
+    SEND_FILE_MAX_AGE_DEFAULT=datetime.timedelta(days=365),
     PERMANENT_SESSION_LIFETIME=datetime.timedelta(hours=SESSION_HOURS),
   )
   app.jinja_env.globals.update(format_time=format_time, format_date=rankings.format_date)
@@ -66,6 +69,12 @@ def create_app(data_dir: str | Path, out_dir: str | Path, backup_dir: str | Path
     d = g.pop("db", None)
     if d is not None:
       d.close()
+
+  @app.url_defaults
+  def static_version(endpoint, values):
+    if endpoint == "static" and "filename" in values:
+      f = Path(app.static_folder) / values["filename"]
+      values["v"] = int(f.stat().st_mtime) if f.exists() else 0
 
   @app.context_processor
   def globals_():
@@ -183,13 +192,29 @@ def create_app(data_dir: str | Path, out_dir: str | Path, backup_dir: str | Path
     prima = edizioni.svuota(get_db())
     pending_import().unlink(missing_ok=True)
     msg = f"Edizione {a} svuotata: tolti {prima['iscritti']} iscritti, {prima['tempi']} arrivi, {prima['intermedi']} intermedi."
-    if request.form.get("pdf") and year_out().exists():
-      pdfs = list(year_out().glob("*.pdf"))
-      for p in pdfs:
-        p.unlink()
-      msg += f" Cancellati {len(pdfs)} PDF in {year_out()}."
-    flash(f"{msg} Copia di prima: {dest.name} (in Backup).", "ok")
+    flash(f"{msg}{cancella_pdf()} Copia di prima: {dest.name} (in Backup).", "ok")
     return redirect(url_for("edizioni_page"))
+
+  @app.post("/tempi/azzera")
+  def azzera_tempi():
+    a = app.config["YEAR"]
+    if request.form.get("conferma", "").strip() != str(a):
+      flash(f"Per azzerare i tempi scrivi l'anno {a} nella casella di conferma", "err")
+      return redirect(url_for("tempi"))
+    dest = backup(force=True)
+    prima = edizioni.azzera_tempi(get_db())
+    flash(f"Tempi del {a} azzerati: tolti {prima['tempi']} finali, {prima['intermedi']} intermedi e "
+          f"{prima['pettorali']} pettorali; iscritti e pagamenti restano.{cancella_pdf()} Copia di prima: {dest.name} (in Backup).", "ok")
+    return redirect(url_for("tempi"))
+
+  def cancella_pdf() -> str:
+    """Se richiesto dal modulo, cancella i PDF dell'edizione (classifiche di prova)."""
+    if not (request.form.get("pdf") and year_out().exists()):
+      return ""
+    pdfs = list(year_out().glob("*.pdf"))
+    for p in pdfs:
+      p.unlink()
+    return f" Cancellati {len(pdfs)} PDF in {year_out()}."
 
   def backup(force: bool = False) -> Path | None:
     if not force and time.time() - _last_backup[0] < BACKUP_EVERY_S:
@@ -241,7 +266,9 @@ def create_app(data_dir: str | Path, out_dir: str | Path, backup_dir: str | Path
       row = d.execute("SELECT * FROM iscritti WHERE id = ?", (iid,)).fetchone()
       if row is None:
         abort(404)
-    form = dict(row) if row else {"pranzo": "NO", "ospiti_pranzo": 0, "pagato": 0}
+    # nuovo iscritto: i casi più frequenti già selezionati (se la persona c'era negli anni
+    # precedenti, app.js li sostituisce con i suoi dati appena si inseriscono nome e data)
+    form = dict(row) if row else {"tipo": "CICLISTA", "sesso": "M", "pranzo": "NO", "ospiti_pranzo": 0, "pagato": 0}
     errors = []
     if request.method == "POST":
       f = request.form
@@ -326,6 +353,38 @@ def create_app(data_dir: str | Path, out_dir: str | Path, backup_dir: str | Path
   def storico_per(chiavi: list[str]) -> dict[str, dict]:
     return edizioni.storico(data_dir, app.config["YEAR"], chiavi)
 
+  @app.get("/api/persone")
+  def api_persone():
+    """Ricerca per parole (anche iniziali: "luca pic") tra gli iscritti di quest'anno e degli anni scorsi."""
+    q = dbm.name_tokens(request.args.get("q", ""))
+    if not q:
+      return jsonify([])
+    match = lambda nome, cognome: all(any(t.startswith(w) for t in dbm.name_tokens(nome, cognome)) for w in q)
+    d = get_db()
+    attuali = {r["chiave"]: r for r in d.execute("SELECT id, chiave, nome, cognome, datanascita, pettorale FROM iscritti")}
+    out = [{"id": r["id"], "nome": r["nome"], "cognome": r["cognome"], "datanascita": r["datanascita"],
+            "pettorale": r["pettorale"], "anno": app.config["YEAR"]}
+           for r in attuali.values() if match(r["nome"], r["cognome"])]
+    out += [p for p in edizioni.persone_precedenti(data_dir, app.config["YEAR"])
+            if p["chiave"] not in attuali and match(p["nome"], p["cognome"])]
+    out.sort(key=lambda p: ("id" not in p, dbm.name_tokens(p["cognome"] or "", "") or [""], dbm.name_tokens(p["nome"] or "")))
+    for p in out:
+      p.pop("chiave", None)
+    return jsonify(out[:20])
+
+  @app.get("/api/storico")
+  def api_storico():
+    """Sesso, crazy e tipologia dall'ultima edizione precedente per nome, cognome e data di nascita."""
+    a = request.args
+    try:
+      nascita = dbm.norm_date(a.get("datanascita", "").strip())
+    except ValueError:
+      nascita = None
+    if not nascita or not (a.get("nome", "").strip() or a.get("cognome", "").strip()):
+      return jsonify(None)
+    k = dbm.make_key(dbm.tidy_name(a.get("nome", "")), dbm.tidy_name(a.get("cognome", "")), nascita)
+    return jsonify(storico_per([k]).get(k))
+
   @app.route("/import", methods=["GET", "POST"])
   def import_csv():
     pending = pending_import()
@@ -375,7 +434,8 @@ def create_app(data_dir: str | Path, out_dir: str | Path, backup_dir: str | Path
       "LEFT JOIN intermedi m ON m.pettorale = p.pettorale LEFT JOIN tempi t ON t.pettorale = p.pettorale "
       "ORDER BY p.pettorale").fetchall()
     counts = {f: d.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for f, t in dbm.FASI.items()}
-    return render_template("tempi.html", rows=rows, counts=counts, tv_primo=_tv_primo(d))
+    con_pettorale = d.execute("SELECT COUNT(*) FROM iscritti WHERE pettorale IS NOT NULL").fetchone()[0]
+    return render_template("tempi.html", rows=rows, counts=counts, tv_primo=_tv_primo(d), con_pettorale=con_pettorale)
 
   @app.route("/tempi/<fase>", methods=["GET", "POST"])
   def inserisci_tempi(fase: str):
@@ -485,6 +545,15 @@ def create_app(data_dir: str | Path, out_dir: str | Path, backup_dir: str | Path
     dest = backup(force=True)
     flash(f"Backup salvato: {dest}", "ok")
     return redirect(url_for("backup_page"))
+
+  @app.get("/iscritti.xlsx")
+  def esporta_iscritti():
+    anno = app.config["YEAR"]
+    return app.response_class(
+      excel.elenco_iscritti(get_db(), anno),
+      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      headers={"Content-Disposition":
+               f"attachment; filename=iscritti-{anno}-{datetime.datetime.now():%Y%m%d-%H%M}.xlsx"})
 
   @app.get("/export.xlsx")
   def export_xlsx():

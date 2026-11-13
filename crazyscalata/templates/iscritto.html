@@ -10,11 +10,20 @@
 <h1>{{ 'Modifica iscritto' if iid else 'Nuovo iscritto' }}</h1>
 {% for e in errors %}<div class="flash err">{{ e }}</div>{% endfor %}
 
-<form method="post" class="card form">
-  <label>Nome <input name="nome" value="{{ form.nome or '' }}" required autofocus></label>
+<form method="post" class="card form"{% if not iid %} id="nuovo-iscritto" data-storico="{{ url_for('api_storico') }}"
+      data-persone="{{ url_for('api_persone') }}" data-iscritto="{{ url_for('modifica', iid=0) }}"{% endif %}>
+  {% if not iid %}
+  <div class="wide cerca-persona">
+    <label>Cerca chi ha già partecipato <input id="cerca-persona" type="search" autocomplete="off"
+      placeholder="es. luca pic  (↑↓ per scegliere, Invio per compilare)" autofocus></label>
+    <ul id="persone" class="suggest" hidden></ul>
+  </div>
+  {% endif %}
+  <label>Nome <input name="nome" value="{{ form.nome or '' }}" required{% if iid %} autofocus{% endif %}></label>
   <label>Cognome <input name="cognome" value="{{ form.cognome or '' }}"></label>
   <label>Data di nascita <input type="date" name="datanascita" value="{{ form.datanascita or '' }}"></label>
   <label>Pettorale <input name="pettorale" inputmode="numeric" value="{{ form.pettorale if form.pettorale is not none else '' }}"></label>
+  {% if not iid %}<p id="storico-msg" class="flash info wide" hidden></p>{% endif %}
   <div class="field"><span>Tipologia</span>{{ choice('tipo', [('CICLISTA', 'Ciclista'), ('PODISTA', 'Podista'), ('', '?')]) }}</div>
   <div class="field"><span>Sesso</span>{{ choice('sesso', [('M', 'M'), ('F', 'F'), ('', '?')]) }}</div>
   <div class="field"><span>Crazy</span>{{ choice('crazy', [('SI', 'Sì'), ('NO', 'No'), ('', '?')]) }}</div>

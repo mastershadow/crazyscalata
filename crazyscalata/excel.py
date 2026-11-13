@@ -1,10 +1,13 @@
 """Import/export nel formato Excel di data/template.xlsx (fogli ISCRITTI e TEMPI)."""
 from __future__ import annotations
 
+import datetime
+import io
 import sqlite3
 from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Font
 
 from . import db as dbm
 from .tempi import parse_time
@@ -58,3 +61,34 @@ def export(db: sqlite3.Connection, path: str | Path):
   for r in rows:
     ws.append([r["pettorale"], r["tempo"], r["intermedio"]])
   wb.save(str(path))
+
+
+ELENCO_COLONNE = [  # (intestazione, larghezza)
+  ("Pettorale", 10), ("Cognome", 18), ("Nome", 18), ("Data di nascita", 14), ("Tipologia", 11), ("Sesso", 7),
+  ("Crazy", 7), ("Pranzo", 8), ("Ospiti pranzo", 13), ("Pagato", 8), ("Email", 28), ("Note", 30), ("Provenienza", 12),
+]
+
+
+def elenco_iscritti(db: sqlite3.Connection, anno: int) -> bytes:
+  """Elenco iscritti da leggere/stampare (non è il formato del template): tutte le colonne utili,
+  filtri attivi, intestazione bloccata."""
+  wb = Workbook()
+  ws = wb.active
+  ws.title = f"Iscritti {anno}"
+  ws.append([h for h, _ in ELENCO_COLONNE])
+  for cell in ws[1]:
+    cell.font = Font(bold=True)
+  for r in db.execute("SELECT * FROM iscritti ORDER BY cognome COLLATE NOCASE, nome COLLATE NOCASE"):
+    nascita = datetime.date.fromisoformat(r["datanascita"]) if r["datanascita"] else None
+    ws.append([r["pettorale"], r["cognome"], r["nome"], nascita, (r["tipo"] or "").capitalize() or None,
+               r["sesso"], r["crazy"], r["pranzo"], r["ospiti_pranzo"] if r["pranzo"] == "SI" else None,
+               "SI" if r["pagato"] else "NO", r["email"], r["note"],
+               {"form": "Modulo", "desk": "Banco", "excel": "Excel"}.get(r["fonte"], r["fonte"])])
+    ws.cell(ws.max_row, 4).number_format = "DD/MM/YYYY"
+  for i, (_, w) in enumerate(ELENCO_COLONNE, 1):
+    ws.column_dimensions[ws.cell(1, i).column_letter].width = w
+  ws.freeze_panes = "A2"
+  ws.auto_filter.ref = ws.dimensions
+  buf = io.BytesIO()
+  wb.save(buf)
+  return buf.getvalue()

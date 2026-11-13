@@ -6,7 +6,7 @@
   <p>Una copia viene salvata automaticamente in <code>data/backup/</code> al massimo ogni 5 minuti mentre si inseriscono dati (si tengono le ultime 50).</p>
   <div class="actions">
     <form method="post"><button class="btn primary">Backup adesso</button></form>
-    <a class="btn" href="{{ url_for('export_xlsx') }}">Esporta Excel</a>
+    <a class="btn" href="{{ url_for('export_xlsx') }}" title="Formato di data/template.xlsx, rileggibile da classifiche.py">Esporta Excel (formato classifiche.py)</a>
   </div>
   <p class="hint">L'Excel ha lo stesso formato di <code>data/template.xlsx</code> e si può rielaborare con <code>classifiche.py</code>.</p>
 </div>

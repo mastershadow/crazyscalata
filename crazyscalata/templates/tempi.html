@@ -42,4 +42,17 @@
     <tr><td colspan="5" class="empty">Nessun tempo inserito</td></tr>
   {% endfor %}
 </table>
+
+{% if rows or tv_primo or con_pettorale %}
+<div class="card" style="margin-top:32px">
+  <h2 style="margin-top:0">Azzera tempi e pettorali del {{ year }}</h2>
+  <p class="hint">Dopo le prove: cancella tutti i tempi finali e intermedi, il primo al traguardo volante
+    e i pettorali assegnati ({{ con_pettorale }}). Iscritti e pagamenti restano. Prima viene salvata una copia in <a href="{{ url_for('backup_page') }}">Backup</a>.</p>
+  <form method="post" action="{{ url_for('azzera_tempi') }}" class="bar">
+    <input name="conferma" placeholder="Scrivi {{ year }}" inputmode="numeric" size="10" autocomplete="off" required>
+    <label class="filter"><input type="checkbox" name="pdf" value="1"> cancella anche i PDF in <code>out/{{ year }}/</code></label>
+    <button class="btn danger">Azzera tempi e pettorali</button>
+  </form>
+</div>
+{% endif %}
 {% endblock %}

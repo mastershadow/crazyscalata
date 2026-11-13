@@ -228,6 +228,28 @@ def test_edizioni(tmp_path):
                                       "pranzo": "NO"}, follow_redirects=True)
   assert "presi dall&#39;edizione 2025" in r.text
 
+  # modulo nuovo iscritto: Ciclista, M, pranzo No preselezionati; i dati del 2025 arrivano da /api/storico
+  html = c.get("/iscritti/nuovo").text
+  for name, value in (("tipo", "CICLISTA"), ("sesso", "M"), ("pranzo", "NO")):
+    assert f'name="{name}" value="{value}" checked' in html
+  h = c.get("/api/storico", query_string={"nome": "Mario", "cognome": "Rossi",
+                                          "datanascita": _nascita(tmp_path, "Mario Rossi")}).json
+  assert h["anno"] == 2025 and h["sesso"] == "M"
+  assert c.get("/api/storico", query_string={"nome": "Mai", "cognome": "Visto", "datanascita": "2001-01-01"}).json is None
+  assert c.get("/api/storico", query_string={"nome": "Mario", "datanascita": "boh"}).json is None
+
+  # ricerca per parole: anni scorsi (con i dati per compilare) e già iscritti quest'anno
+  r = c.get("/api/persone", query_string={"q": "ross mar"}).json
+  assert r and r[0]["id"] and r[0]["anno"] == 2026  # Mario Rossi è già iscritto al 2026: si apre la sua scheda
+  r = c.get("/api/persone", query_string={"q": "anna"}).json
+  assert any(p.get("id") for p in r)  # Anna Bianchi appena iscritta al banco
+  r = c.get("/api/persone", query_string={"q": "BIAN"}).json
+  assert all("bian" in (p["nome"] + " " + p["cognome"]).lower() for p in r)
+  vecchi = [p for p in c.get("/api/persone", query_string={"q": "a"}).json if not p.get("id")]
+  assert vecchi and all(p["anno"] == 2025 and "sesso" in p and "chiave" not in p for p in vecchi)
+  assert c.get("/api/persone", query_string={"q": "zzz"}).json == []
+  assert c.get("/api/persone", query_string={"q": " "}).json == []
+
   # possibili doppioni nella lista
   c.post("/iscritti/nuovo", data={"nome": "Arrivata", "cognome": "Nuova", "datanascita": "2001-01-01", "pranzo": "NO"})
   assert "Possibili doppioni" in c.get("/").text
@@ -274,3 +296,35 @@ def test_svuota_edizione(client, tmp_path):
   backups = list((tmp_path / "data" / "backup").glob("crazyscalata-2026-*.sqlite"))
   import sqlite3
   assert any(sqlite3.connect(b).execute("select count(*) from iscritti").fetchone()[0] == 1 for b in backups)
+
+
+def test_esporta_iscritti(client):
+  import io
+  from openpyxl import load_workbook
+  client.post("/iscritti/nuovo", data={"nome": "Sonia", "cognome": "Prova", "datanascita": "1985-07-02", "pettorale": "4",
+                                       "tipo": "PODISTA", "sesso": "F", "pranzo": "SI", "ospiti_pranzo": "2", "pagato": "1"})
+  assert "Esporta Excel" in client.get("/").text
+  r = client.get("/iscritti.xlsx")
+  assert r.status_code == 200 and "iscritti-2026-" in r.headers["Content-Disposition"]
+  ws = load_workbook(io.BytesIO(r.data)).active
+  rows = list(ws.values)
+  assert rows[0][:4] == ("Pettorale", "Cognome", "Nome", "Data di nascita")
+  assert rows[1][:3] == (4, "Prova", "Sonia") and rows[1][3].date().isoformat() == "1985-07-02"
+  assert rows[1][4:10] == ("Podista", "F", None, "SI", 2, "SI") and rows[1][12] == "Banco"
+
+
+def test_azzera_tempi(client, tmp_path):
+  client.post("/iscritti/nuovo", data={"nome": "Prova", "cognome": "Tempi", "datanascita": "1990-01-01",
+                                       "pettorale": "9", "pranzo": "NO", "pagato": "1"})
+  client.post("/tempi/intermedio", data={"azione": "salva", "testo": "9 10:00"})
+  client.post("/tempi/arrivo", data={"azione": "salva", "testo": "9 30:00"})
+  assert "Azzera tempi e pettorali" in client.get("/tempi").text
+
+  r = client.post("/tempi/azzera", data={"conferma": "26"}, follow_redirects=True)
+  assert "scrivi l&#39;anno 2026" in r.text and "30:00" in r.text
+
+  r = client.post("/tempi/azzera", data={"conferma": "2026"}, follow_redirects=True)
+  assert "tolti 1 finali, 1 intermedi e 1 pettorali" in r.text and "Nessun tempo inserito" in r.text
+  assert "Azzera tempi e pettorali" not in r.text
+  r = client.get("/").text
+  assert "Prova" in r and ">Pagato<" in r and ">9<" not in r

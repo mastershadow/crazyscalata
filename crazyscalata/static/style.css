@@ -120,3 +120,11 @@ details.card > summary { cursor: pointer; }
   header { flex-wrap: wrap; gap: 8px; }
   table.list { display: block; overflow-x: auto; }
 }
+
+/* ricerca di chi ha già partecipato (nuovo iscritto) */
+.cerca-persona { position: relative; }
+.suggest { list-style: none; margin: 4px 0 0; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); max-height: 320px; overflow-y: auto; }
+.suggest li { padding: 7px 10px; border-radius: 6px; cursor: pointer; display: flex; gap: 12px; align-items: baseline; }
+.suggest li.on { background: var(--warn-bg); }
+.suggest li .muted { font-size: 13px; }
+.suggest li .tag { margin-left: auto; }

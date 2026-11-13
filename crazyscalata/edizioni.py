@@ -75,6 +75,41 @@ def svuota(db: sqlite3.Connection) -> dict:
   return prima
 
 
+def azzera_tempi(db: sqlite3.Connection) -> dict:
+  """Cancella tempi finali, intermedi, il primo al traguardo volante segnato a mano e i pettorali
+  assegnati; gli iscritti (pagamenti compresi) restano. Restituisce quanti ce n'erano."""
+  prima = {t: db.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in ("tempi", "intermedi")}
+  prima["pettorali"] = db.execute("SELECT COUNT(*) FROM iscritti WHERE pettorale IS NOT NULL").fetchone()[0]
+  db.execute("UPDATE iscritti SET pettorale = NULL WHERE pettorale IS NOT NULL")
+  db.execute("DELETE FROM tempi")
+  db.execute("DELETE FROM intermedi")
+  db.execute("DELETE FROM impostazioni WHERE chiave = 'traguardo_volante'")
+  db.commit()
+  return prima
+
+
+def persone_precedenti(data_dir: str | Path, anno: int) -> list[dict]:
+  """Tutte le persone delle edizioni prima di `anno`, una per chiave: dati dell'edizione più
+  recente, con sesso/crazy/tipo completati da quelle prima se mancano. "anno" = ultima edizione."""
+  per_chiave: dict[str, dict] = {}
+  for prec in elenco(data_dir):  # dalla più recente
+    if prec >= anno:
+      continue
+    db = sqlite3.connect(f"file:{path(data_dir, prec)}?mode=ro", uri=True)
+    db.row_factory = sqlite3.Row
+    try:
+      for r in db.execute("SELECT chiave, nome, cognome, datanascita, tipo, sesso, crazy FROM iscritti"):
+        p = per_chiave.get(r["chiave"])
+        if p is None:
+          per_chiave[r["chiave"]] = {**dict(r), "anno": prec}
+        else:
+          for c in STORICO_CAMPI:
+            p[c] = p[c] or r[c]
+    finally:
+      db.close()
+  return list(per_chiave.values())
+
+
 def storico(data_dir: str | Path, anno: int, chiavi: list[str]) -> dict[str, dict]:
   """Per ogni chiave, sesso/crazy/tipo dall'edizione precedente più recente in cui c'è
   (solo valori non vuoti) e l'anno da cui vengono: {chiave: {"anno": 2025, "sesso": "M", ...}}."""
